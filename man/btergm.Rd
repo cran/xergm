@@ -39,8 +39,7 @@ Social Science and the Wisdom of Crowds}.
 \examples{
 # A simple toy example:
 
-library("network")
-library("ergm")
+library("statnet")
 set.seed(5)
 
 networks <- list()

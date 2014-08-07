@@ -1,8 +1,8 @@
 
 # how many NAs are there per row or column?
-numMissing <- function(network, type = "both") {
-  numrow <- apply(network, 1, function(x) sum(is.na(x)))
-  numcol <- apply(network, 2, function(x) sum(is.na(x)))
+numMissing <- function(mat, type = "both") {
+  numrow <- apply(mat, 1, function(x) sum(is.na(x)))
+  numcol <- apply(mat, 2, function(x) sum(is.na(x)))
   if (type == "both") {
     return(numrow + numcol)
   } else if (type == "row") {
@@ -15,285 +15,649 @@ numMissing <- function(network, type = "both") {
 }
 
 
-# adjust the dimensions of a matrix to a target matrix by matching the labels
-adjust <- function(source, target, remove = TRUE, add = TRUE) {
-  
-  # make sure vectors are actually coded as vectors, not matrices
-  if (is.matrix(source) && ncol(source) == 1) {
-    nm <- rownames(source)
-    source <- c(source)
-    names(source) <- nm
-  } else if (is.matrix(source) && nrow(source) == 1) {
-    nm <- colnames(source)
-    source <- c(source)
-    names(source) <- nm
-  }
-  if (is.matrix(target) && ncol(target) == 1) {
-    nm <- rownames(target)
-    target <- c(target)
-    names(target) <- nm
-  } else if (is.matrix(target) && nrow(target) == 1) {
-    nm <- colnames(target)
-    target <- c(target)
-    names(target) <- nm
-  }
-  
-  # check source input data and retrieve labels
-  sbipartite <- FALSE
-  if (is.data.frame(source)) {
-    if (is.null(rownames(source))) {
-      stop("The source data.frame does not contain any row labels.")
-    } else {
-      snames <- rownames(source)
-    }
-  } else if (is.matrix(source)) {
-    if (is.null(rownames(source)) && is.null(colnames(source))) {
-      stop("The source matrix does not contain any row or column labels.")
-    }
-    if (nrow(source) != ncol(source)) {
-      sbipartite <- TRUE
-      snamesr <- rownames(source)
-      snamesc <- colnames(source)
-    } else {
-      if (!is.null(rownames(source)) && is.null(colnames(source))) {
-        colnames(source) <- rownames(source)
-      } else if (is.null(rownames(source)) && !is.null(colnames(source))) {
-        rownames(source) <- colnames(source)
-      }
-      snames <- rownames(source)
-    }
-  } else if (is.vector(source)) {
-    snames <- names(source)
-    if (is.null(snames)) {
-      stop("The source vector does not contain any labels.")
-    }
+# check if a matrix is a one-mode matrix
+is.mat.onemode <- function(mat) {
+  if (nrow(mat) != ncol(mat)) {
+    return(FALSE)
+  } else if (!is.null(rownames(mat)) && !is.null(colnames(mat)) 
+      && any(rownames(mat) != colnames(mat))) {
+    return(FALSE)
   } else {
-    stop("The source object must be a matrix, vector, or data.frame.")
+    return(TRUE)
   }
-  
-  # check target input data and retrieve labels
-  tbipartite <- FALSE
-  if (is.data.frame(target)) {
-    if (is.null(rownames(target))) {
-      stop("The target data.frame does not contain any row labels.")
-    } else {
-      tnames <- rownames(target)
-    }
-  } else if (is.matrix(target)) {
-    if (is.null(rownames(target)) && is.null(colnames(target))) {
-      stop("The target matrix does not contain any row or column labels.")
-    }
-    if (nrow(target) != ncol(target)) {
-      tbipartite <- TRUE
-      tnamesr <- rownames(target)
-      tnamesc <- colnames(target)
-    } else {
-      if (!is.null(rownames(target)) && is.null(colnames(target))) {
-        colnames(target) <- rownames(target)
-      } else if (is.null(rownames(target)) && !is.null(colnames(target))) {
-        rownames(target) <- colnames(target)
-      }
-      tnames <- rownames(target)
-    }
-  } else if (is.vector(target)) {
-    tnames <- names(target)
-    if (is.null(tnames)) {
-      stop("The target vector does not contain any labels.")
-    }
-  } else {
-    stop("The target object must be a matrix, vector, or data.frame.")
-  }
-  
-  if (tbipartite != sbipartite) {
-    stop("Either source or target is bipartite, but not both.")
-  }
-  
-  # add missing rows and columns
-  if (tbipartite == FALSE) {
-    add.tindices <- which(!tnames %in% snames)  # add which rows as NA
-    add.labels <- tnames[add.tindices]
-    if (add == TRUE && length(add.tindices) > 0) {
-      for (i in 1:length(add.tindices)) {
-        if (is.matrix(source)) {
-          insert <- rep(NA, ncol(source))
-          part1 <- source[1:(add.tindices[i] - 1), ]
-          part2 <- source[add.tindices[i]:nrow(source), ]
-          temp <- rbind(part1, insert, part2)
-          insert <- rep(NA, nrow(temp))
-          part1 <- temp[, 1:(add.tindices[i] - 1)]
-          part2 <- temp[, add.tindices[i]:ncol(temp)]
-          source <- cbind(part1, insert, part2)
-          rownames(source)[add.tindices[i]] <- add.labels[i]
-          colnames(source)[add.tindices[i]] <- add.labels[i]
-        } else if (is.data.frame(source)) {
-          insert <- rep(NA, ncol(source))
-          part1 <- source[1:(add.tindices[i] - 1), ]
-          part2 <- source[add.tindices[i]:nrow(source), ]
-          source <- rbind(part1, insert, part2)
-          rownames(source)[add.tindices[i]] <- add.labels[i]
-        } else {
-          part1 <- source[1:(add.tindices[i] - 1)]
-          part2 <- source[add.tindices[i]:length(source)]
-          source <- c(part1, NA, part2)
-          names(source)[add.tindices[i]] <- add.labels[i]
-        }
-      }
-    }
-  } else {
-    add.tindicesr <- which(!tnamesr %in% snamesr)  # add which rows as NA
-    add.tindicesc <- which(!tnamesc %in% snamesc)  # add which columns as NA
-    add.labelsr <- tnamesr[add.tindicesr]
-    add.labelsc <- tnamesc[add.tindicesc]
-    if (add == TRUE) {
-      if (length(add.tindicesr) > 0) {
-        for (i in 1:length(add.tindicesr)) {
-          insert <- rep(NA, ncol(source))
-          part1 <- source[1:(add.tindicesr[i] - 1), ]
-          part2 <- source[add.tindicesr[i]:nrow(source), ]
-          source <- rbind(part1, insert, part2)
-          rownames(source)[add.tindicesr[i]] <- add.labelsr[i]
-        }
-      }
-      if (length(add.tindicesc) > 0) {
-        for (i in 1:length(add.tindicesr)) {
-          insert <- rep(NA, nrow(source))
-          part1 <- source[, 1:(add.tindicesc[i] - 1)]
-          part2 <- source[, add.tindicesc[i]:ncol(source)]
-          source <- cbind(part1, insert, part2)
-          colnames(source)[add.tindicesc[i]] <- add.labelsc[i]
-        }
-      }
-    }
-  }
-  
-  # remove unnecessary rows and columns from source network
-  if (remove == TRUE) {
-    if (sbipartite == FALSE) {
-      keep.sindices <- which(snames %in% tnames)  # retain which rows?
-      if (is.matrix(source)) {
-        source <- rbind(source[keep.sindices, ])
-        source <- cbind(source[, keep.sindices])
-      } else if (is.data.frame(source)) {
-        source <- rbind(source[keep.sindices, ])
-      } else {
-        source <- source[keep.sindices]
-      }
-    } else {
-      keep.sindicesr <- which(snamesr %in% tnamesr)  # retain which rows?
-      #source <- rbind(source[keep.sindicesr, ])
-      keep.sindicesc <- which(snamesc %in% tnamesc)  # retain which columns?
-      #source <- cbind(source[, keep.sindicesc])
-      source <- source[keep.sindicesr, keep.sindicesc]
-    }
-  }
-  
-  return(source)
 }
 
 
-# process NA values in a matrix (= remove nodes with NAs iteratively)
-handleMissings <- function(mat, na = NA, method = "remove", logical = FALSE) {
-  if (!is.matrix(mat) && !is.data.frame(mat)) {
-    stop("A matrix or data.frame must be provided.")
-  }
-  if (nrow(mat) == ncol(mat)) {
-    onemode <- TRUE
+# check if a matrix represents a directed network
+is.mat.directed <- function(mat) {
+  if (nrow(mat) != ncol(mat)) {
+    return(FALSE)
+  } else if (!is.null(rownames(mat)) && !is.null(colnames(mat)) 
+      && any(rownames(mat) != colnames(mat))) {
+    return(FALSE)
   } else {
-    onemode <- FALSE
+    if (any(mat != t(mat))) {
+      return(TRUE)
+    } else {
+      return(FALSE)
+    }
   }
-  if (na %in% mat) {
-    mat[mat == na] <- NA
+}
+
+
+
+# process NA values (= remove nodes with NAs iteratively)
+handleMissings <- function(mat, na = NA, method = "remove", logical = FALSE) {
+  
+  # check and convert arguments
+  if (is.null(mat)) {
+    stop("The 'mat' argument is not valid.")
+  } else if (class(mat) == "list") {
+    # OK; do nothing; check later in next step
+    initialtype <- "list"
+  } else if (class(mat) %in% c("matrix", "network", "data.frame")) {
+    # wrap in list
+    initialtype <- class(mat)
+    mat <- list(mat)
+  } else if (length(mat) > 1) {
+    # vector --> wrap in list
+    initialtype <- class(mat)
+    mat <- list(mat)
+  } else {
+    stop("The 'mat' argument is not valid.")
   }
-  na.mat <- is.na(mat)
-  if (NA %in% mat) {
-    obs <- length(mat)
-    missing.abs <- length(which(is.na(mat) == TRUE))
-    missing.perc <- round(100 * missing.abs / obs, digits = 2)
-    if (method == "fillmode") {
-      nwunique <- unique(as.numeric(mat))
-      nwmode <- nwunique[which.max(tabulate(match(mat, nwunique)))]
-      mat[is.na(mat)] <- nwmode
-      message(paste0(missing.perc, "% of the data (= ", missing.abs, 
-          " ties) were replaced by the mode (", nwmode, 
-          ") because they were NA."))
-    } else if (method == "remove") {
-      rowLabels <- rownames(mat)
-      colLabels <- colnames(mat)
-      if (is.data.frame(mat) || ncol(mat) == 1) {
-        while(sum(numMissing(mat, type = "row")) > 0) {
-          rowNAs <- numMissing(mat, type = "row")
-          maxNA <- max(rowNAs)
-          indices <- which(rowNAs == maxNA)
-          mat <- mat[-indices, ]
-          rowLabels <- rowLabels[-indices]
-          na.mat[indices, ] <- TRUE
-        }
-      } else if (onemode == TRUE) {
-        while(sum(numMissing(mat)) > 0) {
-          indices <- which(numMissing(mat) == max(numMissing(mat)))
-          mat <- mat[-indices, -indices]
-          rowLabels <- rowLabels[-indices]
-          colLabels <- colLabels[-indices]
-          na.mat[indices, ] <- TRUE
-          na.mat[, indices] <- TRUE
-        }
+  
+  onemode <- list()  # will indicate whether it is a one- or two-mode network
+  directed <- list()  # will indicate whether the network is directed
+  attribnames <- list()  # will contain the names of nodal attributes
+  attributes <- list()  # will contain the nodal attributes at each time step
+  type <- list()  # will indicate the type of data structure at time step i
+  for (i in 1:length(mat)) {
+    if (class(mat[[i]]) == "matrix") {
+      # check manually if onemode and directed
+      onemode[[i]] <- is.mat.onemode(mat[[i]])  # helper function
+      directed[[i]] <- is.mat.directed(mat[[i]])  # helper function
+      type[[i]] <- "matrix"
+    } else if (class(mat[[i]]) == "network") {
+      # save onemode and directed information; save attributes for later use
+      if (is.bipartite(mat[[i]])) {
+        onemode[[i]] <- FALSE
       } else {
-        while(sum(numMissing(mat, type = "row")) + sum(numMissing(mat, 
-            type = "col")) > 0) {
-          rowNAs <- numMissing(mat, type = "row")
-          colNAs <- numMissing(mat, type = "col")
-          maxNA <- max(c(rowNAs, colNAs))
-          if (length(which(rowNAs == maxNA)) > 0) {
-            indices <- which(rowNAs == maxNA)
-            mat <- mat[-indices, ]
+        onemode[[i]] <- TRUE
+      }
+      if (is.directed(mat[[i]])) {
+        directed[[i]] <- TRUE
+      } else {
+        directed[[i]] <- FALSE
+      }
+      attribnames[[i]] <- list.vertex.attributes(mat[[i]])
+      attrib <- list()  # list of attributes at time i
+      for (j in 1:length(attribnames[[i]])) {
+        attrib[[j]] <- get.vertex.attribute(mat[[i]], attribnames[[i]][j])
+      }
+      attributes[[i]] <- attrib
+      mat[[i]] <- as.matrix(mat[[i]])
+      type[[i]] <- "network"
+    } else if (class(mat[[i]]) == "data.frame") {
+      type[[i]] <- "data.frame"
+    } else {
+      type[[i]] <- class(mat[[i]])
+    }
+  }
+  
+  if (is.null(logical) || !is.logical(logical) || length(logical) > 1) {
+    stop("The 'logical' argument should be either TRUE or FALSE.")
+  }
+  if (is.null(method) || class(method) != "character") {
+    stop("The 'method' argument should be a character object.")
+  }
+  if (length(method) > 1) {
+    method <- method[1]
+  }
+  
+  na.mat <- list()  # will contain matrices indicating which values are NA
+  for (i in 1:length(mat)) {
+    na.mat[[i]] <- is.na(mat[[i]])
+    if (length(mat) == 1) {  # used for reporting later
+      time <- ""
+    } else {
+      time <- paste0("t = ", i, ": ")
+    }
+    if (class(mat[[i]]) == "matrix") {
+      # matrix objects
+      # replace by real NAs, then count NAs
+      mat[[i]][mat[[i]] %in% na] <- NA
+      obs <- length(mat[[i]])
+      missing.abs <- length(which(is.na(mat[[i]])))
+      missing.perc <- round(100 * missing.abs / obs, digits = 2)
+      
+      # do the actual work
+      if (method == "fillmode") {
+        # fill with modal value (often 0 but not always)
+        nwunique <- unique(as.numeric(mat[[i]]))
+        nwmode <- nwunique[which.max(tabulate(match(mat[[i]], nwunique)))]
+        mat[[i]][is.na(mat[[i]])] <- nwmode
+        message(paste0("t = ", i, ": ", missing.perc, "% of the data (= ", 
+            missing.abs, " ties) were replaced by the mode (", nwmode, 
+            ") because they were NA."))
+      } else if (method == "zero") {
+        # impute 0 when NA
+        mat[[i]][is.na(mat[[i]])] <- 0
+        message(paste0("t = ", i, ": ", missing.perc, "% of the data (= ", 
+            missing.abs, " ties) were replaced by 0 because they were NA."))
+      } else if (method == "remove") {
+        # remove rows and columns with NA values iteratively
+        rowLabels <- rownames(mat[[i]])
+        colLabels <- colnames(mat[[i]])
+        if (onemode[[i]] == TRUE) {
+          while(sum(numMissing(mat[[i]])) > 0) {
+            indices <- which(numMissing(mat[[i]]) == max(numMissing(mat[[i]])))
+            mat[[i]] <- mat[[i]][-indices, -indices]
             rowLabels <- rowLabels[-indices]
-            na.mat[indices, ] <- TRUE
-          } else if (length(which(colNAs == maxNA)) > 0) {
-            indices <- which(colNAs == maxNA)
-            mat <- mat[, -indices]
             colLabels <- colLabels[-indices]
-            na.mat[, indices] <- TRUE
+            na.mat[[i]][indices, ] <- TRUE
+            na.mat[[i]][, indices] <- TRUE
+            if (type[[i]] == "network") {
+              for (j in 1:length(attribnames[[i]])) {
+                attributes[[i]][[j]] <- attributes[[i]][[j]][-indices]
+              }
+            }
+          }
+        } else {
+          while(sum(numMissing(mat[[i]], type = "row")) + 
+              sum(numMissing(mat[[i]], type = "col")) > 0) {
+            rowNAs <- numMissing(mat[[i]], type = "row")
+            colNAs <- numMissing(mat[[i]], type = "col")
+            maxNA <- max(c(rowNAs, colNAs))
+            if (length(which(rowNAs == maxNA)) > 0) {
+              indices <- which(rowNAs == maxNA)
+              mat[[i]] <- mat[[i]][-indices, ]
+              rowLabels <- rowLabels[-indices]
+              na.mat[[i]][indices, ] <- TRUE
+              if (type[[i]] == "network") {
+                for (j in 1:length(attribnames[[i]])) {
+                  attributes[[i]][[j]] <- attributes[[i]][[j]][-indices]
+                }
+              }
+            } else if (length(which(colNAs == maxNA)) > 0) {
+              indices <- which(colNAs == maxNA)
+              mat[[i]] <- mat[[i]][, -indices]
+              colLabels <- colLabels[-indices]
+              na.mat[[i]][, indices] <- TRUE
+              # in bipartite networks, attributes for rows and columns are 
+              # saved in a single vector consecutively
+              indices.bip <- nrow(mat[[i]]) + indices
+              if (type[[i]] == "network") {
+                for (j in 1:length(attribnames[[i]])) {
+                  attributes[[i]][[j]] <- attributes[[i]][[j]][-indices.bip]
+                }
+              }
+            }
+          }
+        }
+        rownames(mat[[i]]) <- rowLabels
+        colnames(mat[[i]]) <- colLabels
+        removed.abs <- obs - length(mat[[i]])
+        removed.perc <- round(100 * removed.abs / obs, digits = 2)
+        message(paste0("t = ", i, ": ", removed.perc, "% of the data (= ", 
+            removed.abs, " ties) were dropped due to ", missing.perc, "% (= ", 
+            missing.abs, ") missing ties."))
+      } else {
+        stop("Method not supported.")
+      }
+      
+      # convert back into network if initial item was a network
+      if (type[[i]] == "network") {
+        bip <- (onemode[[i]] == FALSE)
+        mat[[i]] <- network(mat[[i]], directed = directed[[i]], 
+            bipartite = bip)
+        for (j in 1:length(attribnames[[i]])) {
+          mat[[i]] <- set.vertex.attribute(mat[[i]], attribnames[[i]][j], 
+              attributes[[i]][[j]])
+        }
+      }
+    } else if (class(mat[[i]]) == "data.frame") {
+      # data.frame objects
+      # replace by real NAs, then count NAs
+      for (j in 1:nrow(mat[[i]])) {
+        for (k in 1:ncol(mat[[i]])) {
+          if (mat[[i]][j, k] %in% na) {
+            mat[[i]][j, k] <- NA
           }
         }
       }
-      rownames(mat) <- rowLabels
-      colnames(mat) <- colLabels
-      removed.abs <- obs - length(mat)
-      removed.perc <- round(100 * removed.abs / obs, digits = 2)
-      message(paste0(removed.perc, "% of the data (= ", removed.abs, 
-          " ties) were dropped due to ", missing.perc, "% (= ", missing.abs, 
-          ") missing ties."))
-    } else {
-      stop("Method not supported.")
+      obs <- nrow(mat[[i]]) * ncol(mat[[i]])
+      missing.abs <- length(which(is.na(mat[[i]])))
+      missing.perc <- round(100 * missing.abs / obs, digits = 2)
+      
+      # do the actual work
+      if (method == "fillmode") {
+        # fill with modal value (often 0 but not always)
+        for (j in 1:ncol(mat[[i]])) {
+          if (is.numeric(mat[[i]][, j])) {
+            nwunique <- unique(as.numeric(mat[[i]][, j]))
+            nwmode <- nwunique[which.max(tabulate(match(mat[[i]][, j], 
+                nwunique)))]
+            mat[[i]][, j][is.na(mat[[i]][, j])] <- nwmode
+          }
+        }
+        message(paste0("t = ", i, ": ", missing.perc, "% of the data (= ", 
+            missing.abs, " ties) were replaced by the mode in the respective ", 
+            "column because they were NA."))
+      } else if (method == "zero") {
+        # impute 0 when NA
+        for (j in 1:ncol(mat[[i]])) {
+          mat[[i]][, j][is.na(mat[[i]][, j])] <- 0
+        }
+        message(paste0("t = ", i, ": ", missing.perc, "% of the data (= ", 
+            missing.abs, " elements) were replaced by 0 because they were NA."))
+      } else if (method == "remove") {
+        # remove rows with NA values
+        before <- nrow(mat[[i]])
+        mat[[i]] <- mat[[i]][complete.cases(mat[[i]]), ]
+        after <- nrow(mat[[i]])
+        removed <- before - after
+        rem.perc <- 100 * (1 - after / before)
+        message(paste0("t = ", i, ": ", removed, " rows (", rem.perc, 
+            "% of all rows) were removed due to missing elements."))
+      } else {
+        stop("Method not supported.")
+      }
+    } else if (length(mat[[i]]) > 1) {
+      # vectors of arbitrary content
+      mat[[i]][mat[[i]] %in% na] <- NA
+      obs <- length(mat[[i]])
+      missing.abs <- length(which(is.na(mat[[i]])))
+      missing.perc <- round(100 * missing.abs / obs, digits = 2)
+      
+      # do the actual work
+      if (method == "fillmode") {
+        # fill with modal value (often 0 but not always)
+        if (!is.numeric(mat[[i]])) {
+          stop("'fillmode' is only compatible with numeric objects.")
+        }
+        nwunique <- unique(as.numeric(mat[[i]]))
+        nwmode <- nwunique[which.max(tabulate(match(mat[[i]], nwunique)))]
+        mat[[i]][is.na(mat[[i]])] <- nwmode
+        message(paste0("t = ", i, ": ", missing.perc, "% of the data (= ", 
+            missing.abs, " ties) were replaced by the mode in the respective ", 
+            "column because they were NA."))
+      } else if (method == "zero") {
+        # impute 0 when NA
+        mat[[i]][is.na(mat[[i]])] <- 0
+        message(paste0("t = ", i, ": ", missing.perc, "% of the data (= ", 
+            missing.abs, " ties) were replaced by 0 because they were NA."))
+      } else if (method == "remove") {
+        # remove NA values
+        mat[[i]] <- mat[[i]][!is.na(mat[[i]])]
+        message(paste0(time, missing.perc, "% of the data (= ", 
+            missing.abs, " elements) were removed because they were NA."))
+      } else {
+        stop("Method not supported.")
+      }
     }
   }
+  
   if (logical == TRUE) {
-    return(na.mat)
+    if (length(na.mat) == 1 && initialtype != "list") {
+      return(na.mat[[1]])
+    } else {
+      return(na.mat)
+    }
   } else {
-    return(mat)
+    if (length(mat) == 1 && initialtype != "list") {
+      return(mat[[1]])
+    } else {
+      return(mat)
+    }
+  }
+}
+
+
+# adjust the dimensions of a source object to the dimensions of a target object
+adjust <- function(source, target, remove = TRUE, add = TRUE) {
+  
+  # make sure the source is a list
+  if (is.null(source)) {
+    stop("The 'source' argument was not recognized.")
+  } else if (class(source) == "matrix") {
+    # wrap in list
+    sources <- list()
+    sources[[1]] <- source
+    sources.initialtype <- "matrix"
+  } else if (class(source) == "network") {
+    # wrap in list
+    sources <- list()
+    sources[[1]] <- source
+    sources.initialtype <- "network"
+  } else if (class(source) == "data.frame") {
+    # wrap in list
+    sources <- list()
+    sources[[1]] <- source
+    sources.initialtype <- "data.frame"
+  } else if (class(source) == "list") {
+    # rename
+    sources <- source
+    sources.initialtype <- "list"
+  } else {
+    # vector of some type; wrap in list
+    sources <- list()
+    sources[[1]] <- source
+    sources.initialtype <- "vector"
+  }
+  
+  # make sure the target is a list
+  if (is.null(target)) {
+    stop("The 'target' argument was not recognized.")
+  } else if (class(target) == "matrix") {
+    # wrap in list
+    targets <- list()
+    targets[[1]] <- target
+    targets.initialtype <- "matrix"
+  } else if (class(target) == "network") {
+    # wrap in list
+    targets <- list()
+    targets[[1]] <- target
+    targets.initialtype <- "network"
+  } else if (class(target) == "data.frame") {
+    # wrap in list
+    targets <- list()
+    targets[[1]] <- target
+    targets.initialtype <- "data.frame"
+  } else if (class(target) == "list") {
+    # rename
+    targets <- target
+    targets.initialtype <- "list"
+  } else {
+    # vector of some type; wrap in list
+    targets <- list()
+    targets[[1]] <- target
+    targets.initialtype <- "vector"
+  }
+  
+  # make sure that both lists (sources and targets) have the same length
+  if (length(sources) == length(targets)) {
+    # OK; do nothing
+  } else if (length(sources) == 1) {
+    for (i in 2:length(targets)) {
+      sources[[i]] <- sources[[1]]
+    }
+  } else if (length(targets) == 1) {
+    for (i in 2:length(sources)) {
+      targets[[i]] <- targets[[1]]
+    }
+  } else {
+    stop("Different numbers of sources and targets were provided.")
+  }
+  
+  # convert each item if necessary and save nodal attributes
+  sources.attribnames <- list()
+  sources.attributes <- list()
+  sources.types <- list()
+  sources.onemode <- list()
+  sources.directed <- list()
+  targets.attribnames <- list()
+  targets.attributes <- list()
+  targets.types <- list()
+  targets.onemode <- list()
+  targets.directed <- list()
+  for (i in 1:length(sources)) {
+    sources.types[[i]] <- class(sources[[i]])
+    if (class(sources[[i]]) == "network") {
+      # save source attributes and other meta information in list
+      sources.attribnames[[i]] <- list.vertex.attributes(sources[[i]])
+      attributes <- list()
+      for (j in 1:length(sources.attribnames[[i]])) {
+        attributes[[j]] <- get.vertex.attribute(sources[[i]], 
+            sources.attribnames[[i]][j])
+      }
+      sources.attributes[[i]] <- attributes
+      sources.onemode[[i]] <- !is.bipartite(sources[[i]])
+      sources.directed[[i]] <- is.directed(sources[[i]])
+      sources[[i]] <- as.matrix(sources[[i]])  # convert to matrix
+    } else if (class(sources[[i]]) == "matrix") {
+      sources.onemode[[i]] <- is.mat.onemode(sources[[i]])
+      sources.directed[[i]] <- is.mat.directed(sources[[i]])
+    } else if (class(sources[[i]]) == "data.frame") {
+      sources.onemode[[i]] <- FALSE
+      sources.directed[[i]] <- TRUE
+    } else {
+      sources[[i]] <- as.matrix(sources[[i]], ncol = 1)
+    }
+    
+    targets.types[[i]] <- class(targets[[i]])
+    if (class(targets[[i]]) == "network") {
+      # save target attributes and other meta information in list
+      targets.attribnames[[i]] <- list.vertex.attributes(targets[[i]])
+      attributes <- list()
+      for (j in 1:length(targets.attribnames[[i]])) {
+        attributes[[j]] <- get.vertex.attribute(targets[[i]], 
+            targets.attribnames[[i]][j])
+      }
+      targets.attributes[[i]] <- attributes
+      targets.onemode[[i]] <- !is.bipartite(targets[[i]])
+      targets.directed[[i]] <- is.directed(targets[[i]])
+      targets[[i]] <- as.matrix(targets[[i]])  # convert to matrix
+    } else if (class(targets[[i]]) == "matrix") {
+      targets.onemode[[i]] <- is.mat.onemode(targets[[i]])
+      targets.directed[[i]] <- is.mat.directed(targets[[i]])
+    } else if (class(targets[[i]]) == "data.frame") {
+      targets.onemode[[i]] <- FALSE
+      targets.directed[[i]] <- TRUE
+    } else {
+      targets[[i]] <- as.matrix(targets[[i]], ncol = 1)
+    }
+  }
+  
+  # go through sources and targets and do the actual adjustment
+  for (i in 1:length(sources)) {
+    source.row.labels <- rownames(sources[[i]])
+    if (is.null(source.row.labels)) {
+      stop(paste0("The source at t = ", i, 
+          " does not contain any row labels."))
+    }
+    source.col.labels <- colnames(sources[[i]])
+    if (is.null(source.col.labels) && sources.types[[i]] %in% c("matrix", 
+        "data.frame", "network")) {
+      stop(paste0("The source at t = ", i, 
+          " does not contain any column labels."))
+    }
+    target.row.labels <- rownames(targets[[i]])
+    if (is.null(target.row.labels)) {
+      stop(paste0("The target at t = ", i, 
+          " does not contain any row labels."))
+    }
+    target.col.labels <- colnames(targets[[i]])
+    if (is.null(target.col.labels) && sources.types[[i]] %in% c("matrix", 
+        "data.frame", "network") && targets.types[[i]] %in% c("matrix", 
+        "data.frame", "network")) {
+      stop(paste0("The target at t = ", i, 
+          " does not contain any column labels."))
+    }
+    
+    # do the adjustment
+    add.row.indices <- which(!target.row.labels %in% source.row.labels)
+    add.row.labels <- target.row.labels[add.row.indices]
+    add.col.indices <- which(!target.col.labels %in% source.col.labels)
+    add.col.labels <- target.col.labels[add.col.indices]
+    nr <- nrow(sources[[i]])  # save for later use
+    if (add == TRUE) {
+      # adjust rows
+      if (length(add.row.indices) > 0) {
+        for (j in 1:length(add.row.indices)) {
+          insert <- rep(NA, ncol(sources[[i]]))
+          part1 <- sources[[i]][1:(add.row.indices[j] - 1), ]
+          if (class(part1) != "matrix") {
+            if (sources.types[[i]] == "matrix") {
+              part1 <- matrix(part1, nrow = 1)
+            } else {
+              part1 <- matrix(part1, ncol = 1)
+            }
+          }
+          rownames(part1) <- rownames(sources[[i]])[1:(add.row.indices[j] - 1)]
+          if (add.row.indices[j] <= nrow(sources[[i]])) {
+            part2 <- sources[[i]][add.row.indices[j]:nrow(sources[[i]]), ]
+          } else {
+            part2 <- matrix(ncol = ncol(sources[[i]]), nrow = 0)
+          }
+          if (class(part2) != "matrix") {
+            part2 <- matrix(part2, ncol = 1)
+          }
+          if (nrow(part2) > 0) {
+            rownames(part2) <- rownames(sources[[i]])[add.row.indices[j]:
+                nrow(sources[[i]])]
+            sources[[i]] <- rbind(part1, insert, part2)
+          } else {
+            sources[[i]] <- rbind(part1, insert)
+          }
+          rownames(sources[[i]])[add.row.indices[j]] <- add.row.labels[j]
+          # adjust nodal attributes (in the one-mode case)
+          if (sources.types[[i]] == "network" && sources.onemode[[i]] == TRUE) {
+            for (k in 1:length(sources.attributes[[i]])) {
+              at1 <- sources.attributes[[i]][[k]][1:(add.row.indices[j] - 1)]
+              at2 <- sources.attributes[[i]][[k]][add.row.indices[j]:length(
+                  sources.attributes[[i]][[k]])]
+              if (sources.attribnames[[i]][k] == "vertex.names") {
+                sources.attributes[[i]][[k]] <- c(at1, 
+                    targets.attributes[[i]][[k]][add.row.indices], at2)
+              } else {
+                sources.attributes[[i]][[k]] <- c(at1, NA, at2)
+              }
+            }
+          }
+        }
+      }
+      
+      # adjust columns
+      if (length(add.col.indices) > 0 && sources.types[[i]] %in% c("matrix", 
+          "data.frame", "network")) {
+        for (j in 1:length(add.col.indices)) {
+          insert <- rep(NA, nrow(sources[[i]]))
+          part1 <- sources[[i]][, 1:(add.col.indices[j] - 1)]
+          if (class(part1) != "matrix") {
+            part1 <- matrix(part1, ncol = 1)
+          }
+          colnames(part1) <- colnames(sources[[i]])[1:(add.col.indices[j] - 1)]
+          if (add.col.indices[j] <= ncol(sources[[i]])) {
+            part2 <- sources[[i]][, add.col.indices[j]:ncol(sources[[i]])]
+          } else {  # if last column, add empty column as second part
+            part2 <- matrix(nrow = nrow(sources[[i]]), ncol = 0)
+          }
+          if (class(part2) != "matrix") {
+            part2 <- matrix(part2, ncol = 1)
+          }
+          colnames(part2) <- colnames(sources[[i]])[add.col.indices[j]:
+              ncol(sources[[i]])]
+          sources[[i]] <- cbind(part1, insert, part2)
+          colnames(sources[[i]])[add.col.indices[j]] <- add.col.labels[j]
+        }
+      }
+      # adjust nodal attributes for two-mode networks
+      if (sources.types[[i]] == "network" && sources.onemode[[i]] == FALSE) {
+        add.col.indices <- sapply(add.col.indices, function(x) x + nr)
+        combined.indices <- c(add.row.indices, add.col.indices)
+        for (j in 1:length(sources.attributes[[i]])) {
+          for (k in 1:length(combined.indices)) {
+            at1 <- sources.attributes[[i]][[j]][1:(combined.indices[k] - 1)]
+            at2 <- sources.attributes[[i]][[j]][combined.indices[k]:length(
+                sources.attributes[[i]][[j]])]
+            if (sources.attribnames[[i]][k] == "vertex.names") {
+              sources.attributes[[i]][[j]] <- c(at1, 
+                  targets.attributes[[i]][[j]][combined.indices], at2)
+            } else {
+              sources.attributes[[i]][[j]] <- c(at1, NA, at2)
+            }
+          }
+        }
+      }
+    }
+    
+    if (remove == TRUE) {
+      keep.row.indices <- which(source.row.labels %in% target.row.labels)
+      if (sources.types[[i]] %in% c("matrix", "data.frame", "network") && 
+          targets.types[[i]] %in% c("matrix", "data.frame", "network")) {
+        keep.col.indices <- which(source.col.labels %in% target.col.labels)
+      } else if (sources.types[[i]] %in% c("matrix", "data.frame", "network") 
+          && !targets.types[[i]] %in% c("matrix", "data.frame", "network")) { 
+        # target is a vector -> keep all columns of source
+        if (sources.onemode[[i]] == TRUE) {  # columns same as rows
+          keep.col.indices <- keep.row.indices
+        } else {
+          keep.col.indices <- 1:ncol(sources[[i]])
+        }
+      } else {
+        keep.col.indices <- 1
+      }
+      
+      sources[[i]] <- sources[[i]][keep.row.indices, keep.col.indices]
+      if (sources.types[[i]] == "network") {
+        if (sources.onemode[[i]] == TRUE) {
+          for (j in 1:length(sources.attributes[[i]])) {
+            sources.attributes[[i]][[j]] <- sources.attributes[[i]][[j]][
+                keep.row.indices]
+          }
+        } else {
+          keep.col.indices <- sapply(keep.col.indices, function(x) x + nr)
+          combined.indices <- c(keep.row.indices, keep.col.indices)
+          for (j in 1:length(sources.attributes[[i]])) {
+            sources.attributes[[i]][[j]] <- sources.attributes[[i]][[j]][
+                combined.indices]
+          }
+        }
+      }
+    }
+    
+    # convert back into network
+    if (sources.types[[i]] == "network") {
+      sources[[i]] <- network(sources[[i]], directed = sources.directed[[i]], 
+          bipartite = !sources.onemode[[i]])
+      for (j in 1:length(sources.attribnames[[i]])) {
+        sources[[i]] <- set.vertex.attribute(sources[[i]], 
+            sources.attribnames[[i]][j], sources.attributes[[i]][[j]])
+      }
+    } else if (!sources.types[[i]] %in% c("matrix", "data.frame") && 
+        length(sources[[i]]) == 1) {
+      sources[[i]] <- sources[[i]][, 1]
+    }
+    
+    # convert vectors back from one-column matrices to vectors
+    if (!sources.types %in% c("matrix", "network", "data.frame") && 
+        class(sources[[i]]) == "matrix" && ncol(sources[[i]]) == 1) {
+      sources[[i]] <- sources[[i]][, 1]
+    }
+  }
+  
+  if (sources.initialtype == "list") {
+    return(sources)
+  } else {
+    return(sources[[1]])
   }
 }
 
 
 # handle missing data and absent nodes for multiple time points with lags
 preprocess <- function(object, ..., lag = FALSE, covariate = FALSE, 
-    memory = FALSE, na = NA, na.method = "fillmode", structzero = NA, 
-    structzero.method = "remove") {
+    memory = c("no", "autoregression", "stability", "innovation"), na = NA, 
+    na.method = "fillmode", structzero = NA, structzero.method = "remove", 
+    verbose = FALSE) {
   
   # save objects in a list
-  l <- as.list(match.call())[-1]
+  l <- as.list(match.call())[-1]  # names of all objects including 'object'
   arg <- c("lag", "covariate", "memory", "na", "na.method", "structzero", 
-      "structzero.method")
+      "structzero.method", "verbose")  # these args are not included as objects
   for (i in 1:length(arg)) {
     if (arg[i] %in% names(l)) {
       l <- l[-which(names(l) == arg[i])]
     }
   }
   for (i in 1:length(l)) {
-    l[[i]] <- eval(l[[i]])
+    l[[i]] <- eval(l[[i]])  # save the objects in list, not just the names
+    if (class(l[[i]]) != "list") {
+      l[[i]] <- list(l[[i]])
+    }
   }
   
-  # check number of time steps
+  # check number of time steps; what is the length of the longest list in l?
   t <- 1
   for (i in 1:length(l)) {
     if (class(l[[i]]) == "list" && length(l[[i]]) > t) {
@@ -301,225 +665,85 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
     }
   }
   
-  # convert everything into lists of matrices and check number of nodes
-  numr <- 1  # maximum number of row nodes
-  numc <- 1  # maximum number of column nodes
+  # make sure that all lists have the same length
   for (i in 1:length(l)) {
-    if (class(l[[i]]) == "list") {
-      if (length(l[[i]]) > t) {
-        t <- length(l[[i]])
-      }
-      for (j in 1:length(l[[i]])) {
-        if (!is.matrix(l[[i]][[j]]) && !is.network(l[[i]][[j]]) && 
-            !is.vector(l[[i]][[j]])) {
-          stop("Object type in list not recognized.")
-        } else {
-          nr <- nrow(as.matrix(l[[i]][[j]]))
-          if (nr > numr) {
-            numr <- nr
-          }
-          nc <- ncol(as.matrix(l[[i]][[j]]))
-          if (nc > numc) {
-            numc <- nc
-          }
-        }
-      }
-      if (length(l[[i]]) != 1 && length(l[[i]]) != t) {
-        stop("Time-varying covariates have varying lengths.")
-      } else if (length(l[[i]]) == 1) {
-        if (nrow(as.matrix(l[[i]][[1]])) > numr) {
-          numr <- nrow(as.matrix(l[[i]][[1]]))
-        }
-        if (ncol(as.matrix(l[[i]][[1]])) > numc) {
-          numc <- ncol(as.matrix(l[[i]][[1]]))
-        }
-        objects <- list()
-        for (j in 1:t) {
-          objects[[t]] <- as.matrix(l[[i]][[1]])
-        }
-        l[[i]] <- objects
-      }
-    } else {
-      if (nrow(as.matrix(l[[i]])) > numr) {
-        numr <- nrow(as.matrix(l[[i]]))
-      }
-      if (ncol(as.matrix(l[[i]])) > numc) {
-        numc <- ncol(as.matrix(l[[i]]))
-      }
-      objects <- list()
-      for (j in 1:t) {
-        if (is.data.frame(l[[i]]) && ncol(l[[i]]) == t) {
-          objects[[j]] <- l[[i]][, j]
-        } else {
-          objects[[j]] <- l[[i]]
-        }
-      }
-      if (is.data.frame(l[[i]])) {
-        l[[i]] <- objects
-      } else if (!is.matrix(l[[i]]) && !is.network(l[[i]]) && 
-          !is.vector(l[[i]])) {
-        stop("Object type not recognized.")
-      } else {
-        l[[i]] <- lapply(objects, as.matrix)
-      }
-    }
-  }
-  if (numr == numc) {
-    bipartite <- FALSE
-  } else {
-    bipartite <- TRUE
-  }
-  
-  # save nodal attributes of networks
-  nw <- FALSE
-  if (class(l[[1]][[1]]) == "network") {
-    nw <- TRUE
-    directed <- is.directed(l[[1]][[1]])
-    bipartite <- is.bipartite(l[[1]][[1]])
-    attributes <- list()
-    attrlist <- list.vertex.attributes(l[[1]][[1]])
-    attrlist <- attrlist[attrlist != "na"]
-    attrlist <- attrlist[attrlist != "vertex.names"]
-    if (length(attrlist) > 0) {
-      for (i in 1:length(attrlist)) {
-        at <- list()
-        for (j in 1:length(l[[1]])) {
-          at[[j]] <- get.vertex.attribute(l[[1]][[j]], attrlist[i])
-          names(at[[j]]) <- get.vertex.attribute(l[[1]][[j]], "vertex.names")
-        }
-        attributes[[i]] <- at
-      }
-      names(attributes) <- attrlist
-    }
-    for (i in 1:length(attributes)) {
-      if (lag == TRUE && covariate == TRUE) {
-         attributes[[i]] <- attributes[[i]][-length(attributes[[i]])]
-      } else if (lag == TRUE && covariate == FALSE) {
-        attributes[[i]] <- attributes[[i]][-1]
-      }
-    }
-    for (i in 1:length(l)) {
-      for (j in 1:length(l[[i]])) {
-        if (class(l[[i]][[j]]) == "network") {
-          l[[i]][[j]] <- as.matrix(l[[i]][[j]])
-        }
+    if (length(l[[i]]) == 1 && t > 1) {
+      for (j in 2:t) {
+        l[[i]][[j]] <- l[[i]][[1]]
       }
     }
   }
   
-  # get complete vector of node labels
-  rowlabels <- list()
-  collabels <- list()
-  for (i in 1:length(l)) {
-    for (j in 1:t) {
-      if (nrow(l[[i]][[j]]) == numr && !is.null(rownames(l[[i]][[j]]))) {
-        rowlabels[[length(rowlabels) + 1]] <- rownames(l[[i]][[j]])
-      }
-      if (ncol(l[[i]][[j]]) == numc && !is.null(colnames(l[[i]][[j]]))) {
-        collabels[[length(collabels) + 1]] <- colnames(l[[i]][[j]])
+  # infer labels if length corresponds to largest item otherwise in list
+  largest.nr <- 0
+  largest.row.labels <- character()
+  largest.nc <- 0
+  largest.col.labels <- character()
+  for (i in 1:length(l)) {  # find largest items and save their labels
+    for (j in 1:length(l[[i]])) {
+      if (class(l[[i]][[j]]) == "matrix" || class(l[[i]][[j]]) == "network") {
+        if (nrow(as.matrix(l[[i]][[j]])) > largest.nr && 
+            !is.null(rownames(as.matrix(l[[i]][[j]])))) {
+          largest.nr <- nrow(as.matrix(l[[i]][[j]]))
+          largest.row.labels <- rownames(l[[i]][[j]])
+        }
+        if (ncol(as.matrix(l[[i]][[j]])) > largest.nc && 
+            !is.null(colnames(as.matrix(l[[i]][[j]])))) {
+          largest.nc <- ncol(l[[i]][[j]])
+          largest.col.labels <- colnames(l[[i]][[j]])
+        }
+      } else if (class(l[[i]][[j]]) == "data.frame") {
+        if (nrow((l[[i]][[j]]) > largest.nr && 
+            !is.null(rownames(l[[i]][[j]])))) {
+          largest.nr <- nrow(l[[i]][[j]])
+          largest.row.labels <- rownames(l[[i]][[j]])
+        }
+      } else if (is.vector(l[[i]][[j]]) && length(l[[i]][[j]]) > largest.nr && 
+          !is.null(names(l[[i]][[j]]))) {
+        largest.nr <- nrow(l[[i]][[j]])
+        largest.row.labels <- rownames(l[[i]][[j]])
       }
     }
   }
-  if (bipartite == FALSE) {
-    labels <- unique(c(rowlabels, collabels))
-    if (length(labels) == 0) {
-      stop("The object with the largest number of nodes has no node labels.")
-    }
-    for (i in 1:length(labels)) {
-      for (j in 1:length(labels)) {
-        if (!identical(labels[[i]], labels[[j]])) {
-          stop(paste("Node labels are not consistent across objects.", 
-              "There are several objects with the same number of nodes and", 
-              "different node labels."))
-        }
-      }
-    }
-    labels <- labels[[1]]
-  } else {
-    if (length(rowlabels) == 0) {
-      stop("The object with the largest number of rows has no node labels.")
-    }
-    
-    if (length(collabels) == 0) {
-      stop("The object with the largest number of columns has no node labels.")
-    }
-    
-    for (i in 1:length(rowlabels)) {
-      for (j in 1:length(rowlabels)) {
-        if (!identical(rowlabels[[i]], rowlabels[[j]])) {
-          stop(paste("Row labels are not consistent across objects.", 
-              "There are several objects with the same number of row nodes", 
-              "and different node labels."))
-        }
-      }
-    }
-    rowlabels <- rowlabels[[1]]
-    
-    for (i in 1:length(collabels)) {
-      for (j in 1:length(collabels)) {
-        if (!identical(collabels[[i]], collabels[[j]])) {
-          stop(paste("Column labels are not consistent across objects.", 
-              "There are several objects with the same number of column nodes", 
-              "and different node labels."))
-        }
-      }
-    }
-    collabels <- collabels[[1]]
+  if (largest.nc == 0) {  # if col labels are never given, assume same as row l.
+    largest.nc <- largest.nr
+    largest.col.labels <- largest.row.labels
   }
   
-  # check labels and impute them where possible
   for (i in 1:length(l)) {
-    for (j in 1:t) {
-      l[[i]][[j]] <- as.matrix(l[[i]][[j]])
-      rn <- rownames(l[[i]][[j]])
-      cn <- colnames(l[[i]][[j]])
-      nr <- nrow(l[[i]][[j]])
-      nc <- ncol(l[[i]][[j]])
-      if (bipartite == FALSE) {
-        if (length(intersect(rn, labels) < nr)) {
-          rn <- NULL
+    for (j in 1:length(l[[i]])) {
+      if (class(l[[i]][[j]]) == "matrix") {
+        if (nrow(l[[i]][[j]]) == largest.nr && is.null(rownames(l[[i]][[j]]))) {
+          rownames(l[[i]][[j]]) <- largest.row.labels
         }
-        if (is.data.frame(l[[i]][[j]]) || nc == 1) {
-          if (nr != numr && is.null(rn)) {
-            stop(paste0("Data frame (object ", i, ", t = ", j, 
-                ") has the wrong number of rows."))
-          } else if (is.null(rn)) {
-            rownames(l[[i]][[j]]) <- labels
-          }
-        } else if (is.null(rn) && !is.null(cn) && nr == nc) {
-          rownames(l[[i]][[j]]) <- cn
-        } else if (is.null(cn) && !is.null(rn) && nr == nc) {
-          colnames(l[[i]][[j]]) <- rn
-        } else if ((is.null(rn) || length(intersect(rn, labels)) < numr) && 
-            nr == numr) {
-          rownames(l[[i]][[j]]) <- labels
-        } else if (is.null(cn) && nc == numr) {
-          colnames(l[[i]][[j]]) <- labels
-        } else if (nc > 1) {
-          stop("Node labels could not be identified in all cases.")
+        if (ncol(l[[i]][[j]]) == largest.nc && is.null(colnames(l[[i]][[j]]))) {
+          colnames(l[[i]][[j]]) <- largest.col.labels
         }
-      } else {
-        if (length(intersect(rn, rowlabels) < nr)) {
-          rn <- NULL
-        }
-        if (length(intersect(cn, collabels) < nc)) {
-          cn <- NULL
-        }
-        if (is.data.frame(l[[i]][[j]]) || nc == 1) {
-          if (nr != numr && is.null(rn)) {
-            stop(paste0("Data frame (object ", i, ", t = ", j, 
-                ") has the wrong number of rows."))
-          } else if (is.null(rn)) {
-            rownames(l[[i]][[j]]) <- rowlabels
+      } else if (class(l[[i]][[j]]) == "network") {
+        if (nrow(as.matrix(l[[i]][[j]])) == largest.nr && is.null(rownames(
+            as.matrix(l[[i]][[j]])))) {
+          if (!is.bipartite(l[[i]][[j]])) {
+            l[[i]][[j]] <- set.vertex.attribute(l[[i]][[j]], "vertex.names", 
+                largest.row.labels)
+          } else {
+            l[[i]][[j]] <- set.vertex.attribute(l[[i]][[j]], "vertex.names", 
+                c(largest.row.labels, get.vertex.attribute(l[[i]][[j]], 
+                "vertex.names")[(nrow(as.matrix(l[[i]][[j]]) + 1):ncol(
+                as.matrix(l[[i]][[j]])))]))
           }
         }
-        if ((is.null(rn) || length(intersect(rn, rowlabels)) < numr) && 
-            nr == numr) {
-          rownames(l[[i]][[j]]) <- rowlabels
+        if (ncol(as.matrix(l[[i]][[j]])) == largest.nc && is.null(colnames(
+            as.matrix(l[[i]][[j]]))) && is.bipartite(l[[i]][[j]])) {
+          l[[i]][[j]] <- set.vertex.attribute(l[[i]][[j]], "vertex.names", 
+              c(get.vertex.attribute(l[[i]][[j]], "vertex.names")[1:nrow(
+              as.matrix(l[[i]][[j]]))], largest.col.labels))
         }
-        if (is.null(cn) && nc == numc) {
-          colnames(l[[i]][[j]]) <- collabels
-        }
+      } else if (class(l[[i]][[j]]) == "data.frame" && is.null(
+          rownames(l[[i]][[j]])) && nrow(l[[i]][[j]]) == largest.nr) {
+        rownames(l[[i]][[j]]) <- largest.row.labels
+      } else if (is.vector(l[[i]][[j]]) && length(l[[i]][[j]]) == largest.nr && 
+          is.null(names(l[[i]][[j]]))) {
+        names(l[[i]][[j]]) <- largest.row.labels
       }
     }
   }
@@ -528,12 +752,22 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
   for (i in 1:length(l)) {
     for (j in 1:length(l[[i]])) {
       for (k in 1:length(na)) {
-        l[[i]][[j]] <- suppressMessages(handleMissings(l[[i]][[j]], na = na[k], 
-            method = na.method))
+        if (verbose == TRUE) {
+          l[[i]][[j]] <- handleMissings(l[[i]][[j]], na = na[k], 
+              method = na.method)
+        } else {
+          l[[i]][[j]] <- suppressMessages(handleMissings(l[[i]][[j]], 
+              na = na[k], method = na.method))
+        }
       }
       for (k in 1:length(structzero)) {
-        l[[i]][[j]] <- suppressMessages(handleMissings(l[[i]][[j]], 
-            na = structzero[k], method = structzero.method))
+        if (verbose == TRUE) {
+          l[[i]][[j]] <- handleMissings(l[[i]][[j]], na = structzero[k], 
+              method = structzero.method)
+        } else {
+          l[[i]][[j]] <- suppressMessages(handleMissings(l[[i]][[j]], 
+              na = structzero[k], method = structzero.method))
+        }
       }
     }
   }
@@ -553,30 +787,32 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
     for (i in 1:length(forward)) {
       for (j in 1:(t - 1)) {
         forward[[i]][[j]] <- adjust(forward[[i]][[j]], forward[[i]][[j + 1]], 
-            add = FALSE)
+            remove = TRUE, add = FALSE)
       }
-      if (memory == FALSE) {
+      if (covariate == TRUE) {  # remove last time step
         forward[[i]] <- forward[[i]][-t]
-      }
+      }  # result if covariate = TRUE and lag = TRUE
     }
   }
   
   # backward adjustment for dependent networks when lagged cov are present
-  if (lag == TRUE && t > 1) {# && covariate == FALSE && memory == FALSE) {
+  if (lag == TRUE && t > 1) {
     backward <- l
     for (i in 1:length(backward)) {
       for (j in 2:t) {
         backward[[i]][[j]] <- adjust(backward[[i]][[j]], forward[[i]][[j - 1]], 
             add = FALSE)
       }
-      backward[[i]] <- backward[[i]][-1]
-    }
+      backward[[i]] <- backward[[i]][-1]  # remove first time step
+    }  # result when covariate = FALSE and lag = TRUE
   }
   
   # create memory term
-  if (memory == TRUE) {
+  if (memory[1] == "no") {
+    # no memory term
+  } else if (memory[1] %in% c("stability", "autoregression", "innovation")) {
     if (lag == FALSE || covariate == FALSE) {
-      stop(paste("'memory = TRUE' can only be used in conjunction with", 
+      stop(paste("Memory terms can only be created in conjunction with", 
           "'lag = TRUE' and 'covariate = TRUE'."))
     }
     if (t < 2) {
@@ -585,25 +821,32 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
     
     # compute memory terms by comparing forward with backward matrices
     memlist <- list()
-    for (i in 1:(length(forward[[1]]) - 1)) {
-      if (nrow(forward[[1]][[i]]) == nrow(forward[[1]][[i + 1]]) && 
-          ncol(forward[[1]][[i]]) == ncol(forward[[1]][[i + 1]])) {
-        memlist[[i]] <- 1 * (forward[[1]][[i]] == forward[[1]][[i + 1]])
-      } else if (nrow(forward[[1]][[i]]) == nrow(backward[[1]][[i]]) && 
-          ncol(forward[[1]][[i]]) == ncol(backward[[1]][[i]])) {
-        memlist[[i]] <- 1 * (forward[[1]][[i]] == backward[[1]][[i]])
+    for (i in 1:length(forward[[1]])) {
+      if (memory[1] == "autoregression") {
+        memlist[[i]] <- as.matrix(forward[[1]][[i]])
+      } else if (memory[1] == "stability") {
+        memlist[[i]] <- as.matrix(forward[[1]][[i]])
+        memlist[[i]][memlist[[i]] == 0] <- -1
+      } else if (memory[1] == "innovation") {
+        memlist[[i]] <- (as.matrix(forward[[1]][[i]]) * -1 + 1) * as.matrix(
+            backward[[1]][[i]])
+      } else {
+        stop("'memory' argument not recognized.")
       }
     }
     
     # assign names
-    names(memlist) <- paste0("t", 2:length(forward[[1]]))
+    names(memlist) <- paste0("t", 1:length(forward[[1]]), "-t", 
+        2:(length(forward[[1]]) + 1))
+  } else {
+    stop("The 'memory' argument was not recognized.")
   }
   
   # determine return object
   if (covariate == FALSE && lag == TRUE) {
     obj <- backward[[1]]
   } else if (covariate == TRUE && lag == TRUE) {
-    if (memory == FALSE) {
+    if (memory[1] == "no") {
       obj <- forward[[1]]
     } else {
       obj <- memlist
@@ -611,32 +854,8 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
   } else {
     obj <- l[[1]]
   }
-  
-  # reassemble networks
-  if (nw == TRUE) {
-    networks <- lapply(obj, function(x) network(x, directed = directed))
-    if (length(attributes) > 0) {
-      for (i in 1:length(attributes)) {
-        for (j in 1:length(attributes[[i]])) {
-          a <- attributes[[i]][[j]]
-          if (bipartite == FALSE) {
-            a <- a[names(a) %in% rownames(as.matrix(obj[[j]]))]
-            if (length(a) != nrow(as.matrix(obj[[j]]))) {
-              stop(paste("Increasing the size of networks is not possible", 
-                  "right now. Convert your networks to matrices first!"))
-            }
-          } else {
-            stop(paste("Support for bipartite network object has not been", 
-                "implemented. Convert your networks to matrices first!"))
-          }
-          networks[[j]] <- set.vertex.attribute(networks[[j]], 
-              names(attributes)[i], a)
-        }
-      }
-    }
-    obj <- networks
+  if (class(obj) == "list" && length(obj) == 1) {
+    obj <- obj[[1]]
   }
-  
-  # return list
   return(obj)
 }

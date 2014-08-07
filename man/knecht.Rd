@@ -241,8 +241,9 @@ lag <- preprocess(friendship, primary, demographics$sex, lag = TRUE,
     covariate = TRUE, na = NA, na.method = "fillmode", 
     structzero = 10, structzero.method = "remove")
 mem <- preprocess(friendship, primary, demographics$sex, lag = TRUE, 
-    covariate = TRUE, memory = TRUE, na = NA, na.method = "fillmode", 
-    structzero = 10, structzero.method = "remove")
+    covariate = TRUE, memory = "stability", na = NA, 
+    na.method = "fillmode", structzero = 10, 
+    structzero.method = "remove")
 primary.cov <- preprocess(primary, dep, demographics$sex, 
     lag = FALSE, covariate = TRUE)
 sex.cov <- preprocess(demographics$sex, primary.cov, dep, 
@@ -275,7 +276,7 @@ model2 <- btergm(dep ~ edges + mutual + ttriple + transitiveties +
     ctriple + nodeicov("idegsqrt") + nodeicov("odegsqrt") + 
     nodeocov("odegsqrt") + nodeofactor("sex") + nodeifactor("sex") + 
     nodematch("sex") + edgecov(primary.cov) + edgecov(delrecip) + 
-    edgecov(lag) + edgecov(mem), R = 100)
+    edgecov(mem), R = 100)
 
 # look at the results (first using tables, then visually)
 summary(model2)
@@ -285,8 +286,8 @@ plotreg(model2, custom.model.names = "Model 2", custom.coef.names =
     "Transitive ties", "Cyclic triples", "Indegree popularity", 
     "Outdegree popularity", "Outdegree activity", "Ego = male", 
     "Alter = male", "Both nodes = male", "Same primary school", 
-    "Delayed reciprocity", "Lagged network", "Memory term"), 
-    omit.coef = "Edges")
+    "Delayed reciprocity", "Memory term (edge stability)"), 
+    omit.coef = "Edges", file="coefs.pdf")
 
 # step 5: plot goodness of fit (see ?gof.btergm and ?plot.btergmgof)
 gof2 <- gof(model2, nsim = 25)
@@ -303,7 +304,7 @@ model3 <- btergm(dep[1:2] ~ edges + mutual + ttriple + transitiveties +
     ctriple + nodeicov("idegsqrt") + nodeicov("odegsqrt") + 
     nodeocov("odegsqrt") + nodeofactor("sex") + nodeifactor("sex") + 
     nodematch("sex") + edgecov(primary.cov[1:2]) + edgecov(delrecip[1:2]) + 
-    edgecov(lag[1:2]) + edgecov(mem[1:2]), R = 100)
+    edgecov(mem[1:2]), R = 100)
 
 screenreg(list(model1, model2, model3))  # similar results as before
 
@@ -313,17 +314,18 @@ gof3 <- gof(model3, nsim = 100, target = dep[[3]], formula = dep[[3]] ~
     nodeicov("idegsqrt") + nodeicov("odegsqrt") + 
     nodeocov("odegsqrt") + nodeofactor("sex") + nodeifactor("sex") + 
     nodematch("sex") + edgecov(primary.cov[[3]]) + 
-    edgecov(delrecip[[3]]) + edgecov(lag[[3]]) + edgecov(mem[[3]]))
+    edgecov(delrecip[[3]]) + edgecov(mem[[3]]))
 
 # display goodness of fit
 plot(gof3, roc = FALSE, pr = FALSE)  # predictive fit (boxplots)
 gof3  # display goodness of fit tables
+pdf("rocpr.pdf")
 plot(gof3, boxplot = FALSE, pr = FALSE, roc = TRUE, 
     roc.random = TRUE, pr.random = FALSE, ylab = "TPR/PPV", 
     xlab = "FPR/TPR", roc.main = "ROC and PR curves")  # ROC curve
 plot(gof3, boxplot = FALSE, roc = FALSE, pr = TRUE, 
     pr.random = TRUE, rocpr.add = TRUE)  # add PR curve
-
+dev.off()
 
 # ====================================================================
 # assess predictive goodness of fit of a SAOM (estimated using RSiena)

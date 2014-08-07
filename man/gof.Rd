@@ -19,19 +19,19 @@ Assess goodness of fit and degeneracy of btergm and other network models.
     formula = getformula(model), nsim = 100, MCMC.interval = 10000, 
     MCMC.burnin = 10000, parallel = c("no", "MPI", "SOCK"), 
     ncpus = detectCores() - 1, cl = NULL, classicgof = TRUE, 
-    rocprgof = TRUE, checkdegeneracy = TRUE, dsp = TRUE, 
-    esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, 
-    odegree = TRUE, kstar = TRUE, istar = TRUE, ostar = TRUE, 
-    pr.impute = "poly4", verbose = TRUE, ...)
+    rocprgof = TRUE, checkdegeneracy = TRUE, 
+    dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, 
+    idegree = TRUE, odegree = TRUE, kstar = TRUE, istar = TRUE, 
+    ostar = TRUE, pr.impute = "poly4", verbose = TRUE, ...)
 
 \S4method{gof}{ergm}(model, target = NULL, 
     formula = getformula(model), nsim = 100, MCMC.interval = 10000, 
     MCMC.burnin = 10000, parallel = c("no", "MPI", "SOCK"), 
     ncpus = detectCores() - 1, cl = NULL, classicgof = TRUE, 
-    rocprgof = TRUE, checkdegeneracy = TRUE, dsp = TRUE, 
-    esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, 
-    odegree = TRUE, kstar = TRUE, istar = TRUE, ostar = TRUE, 
-    pr.impute = "poly4", verbose = TRUE, ...)
+    rocprgof = TRUE, checkdegeneracy = TRUE, 
+    dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, 
+    idegree = TRUE, odegree = TRUE, kstar = TRUE, istar = TRUE, 
+    ostar = TRUE, pr.impute = "poly4", verbose = TRUE, ...)
 
 \S4method{gof}{sienaAlgorithm}(model, siena.data, siena.effects, 
     predict.period = NULL, nsim = 50, parallel = c("no", "multicore", 

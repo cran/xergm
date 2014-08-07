@@ -141,9 +141,23 @@ setMethod(f = "confint", signature = "btergm", definition = function(object,
     } else if (is.numeric(parm)) {
       parm <- pnames[parm]
     }
-    ci <- t(apply(object@bootsamp, 2, function(object) quantile(object, 
+    samples <- object@bootsamp[complete.cases(object@bootsamp), ]
+    n.orig <- nrow(object@bootsamp)
+    n.ret <- nrow(samples)
+    perc <- 100 * (n.orig - n.ret) / n.orig
+    if (nrow(samples) != nrow(object@bootsamp)) {
+      warning(paste0("Too little variation in the model. ", n.orig - n.ret, 
+          " replications (", perc, "%) are dropped from CI estimation."))
+    }
+    ci <- t(apply(samples, 2, function(object) quantile(object, 
         c(((1 - level) / 2), 1 - ((1 - level) / 2)))))
     ci <- cbind(cf, ci)[parm, ]
+    if (class(ci) == "numeric") {
+      ci.nam <- names(ci)
+      ci <- matrix(ci, nrow = 1)
+      colnames(ci) <- ci.nam
+      rownames(ci) <- names(cf)
+    }
     colnames(ci)[1] <- "Estimate"
     return(ci)
   }
@@ -189,18 +203,18 @@ preprocessrhs <- function(rhs, time.steps, iterator = "i", dep = NULL) {
   for (k in 1:length(rhs.terms)) {
     if (grepl("((edge)|(dyad))cov", rhs.terms[k])) {
       if (grepl(",\\s*?((attr)|\\\")", rhs.terms[k])) { # with attrib argument
-        x1 <- sub("(((edge)|(dyad))cov\\()(.+)((,\\s*a*.*?)\\))", "\\1", 
+        x1 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)", "\\1", 
             rhs.terms[k], perl = TRUE)
-        x2 <- sub("(((edge)|(dyad))cov\\()(.+)((,\\s*a*.*?)\\))", "\\5", 
+        x2 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)", "\\5", 
             rhs.terms[k], perl = TRUE)
-        x3 <- sub("(((edge)|(dyad))cov\\()(.+)((,\\s*a*.*?)\\))", "\\6", 
+        x3 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)", "\\6", 
             rhs.terms[k], perl = TRUE)
       } else { # without attribute argument
-        x1 <- sub("(((edge)|(dyad))cov\\()(.+)((,*\\s*a*.*?)\\))", "\\1", 
+        x1 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)", "\\1", 
             rhs.terms[k], perl = TRUE)
-        x2 <- sub("(((edge)|(dyad))cov\\()(.+)((,*\\s*a*.*?)\\))", "\\5", 
+        x2 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)", "\\5", 
             rhs.terms[k], perl = TRUE)
-        x3 <- sub("(((edge)|(dyad))cov\\()(.+)((,*\\s*a*.*?)\\))", "\\6", 
+        x3 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)", "\\6", 
             rhs.terms[k], perl = TRUE)
       }
       type <- class(eval(parse(text = x2)))

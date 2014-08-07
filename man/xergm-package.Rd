@@ -13,7 +13,7 @@ and diagnostic measures and plots. GERGMs have not been implemented
 yet. To display citation information, type \code{citation("xergm")}.
 }
 \seealso{
-\link{btergm} \link{preprocess} \link{simulate.btergm} \link[xergm]{gof} \link{interpret} \link{btergm-class}
+\link{btergm} \link{preprocess} \link{simulate.btergm} \link[xergm]{gof} \link{interpret} \link{btergm-class} \link{tnam} \link{tnam-terms}
 }
 \author{
 Philip Leifeld (\url{http://www.philipleifeld.de})

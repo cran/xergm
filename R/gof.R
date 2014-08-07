@@ -212,7 +212,7 @@ statnetgof <- function(gofobject, simulations, target, dsp = TRUE,
           summary(x ~ degree(0:degree.max)))
       degree.reduced <- reduce.matrix(degree.sim, degree.obs)
       stats <- c(stats, degree = list(degree.reduced$comparison))
-      raw <- c(raw, degree = list(as.matrix(Matrix(degree.reduced$sim))))
+      raw <- c(raw, degree = list(Matrix(as.matrix(degree.reduced$sim))))
     }
   } else {
     message(" -> Ignoring degree because 'degree = FALSE'.")
@@ -454,6 +454,8 @@ rocprgof <- function(gofobject, simulations, target, missingmatrix = NULL,
         pr <- sums[lower.tri(sums)]
         y <- as.matrix(net)[lower.tri(as.matrix(net))]
       }
+      pr <- pr[!is.na(y)]
+      y <- y[!is.na(y)]
       target.pr[[j]] <- pr
       target.y[[j]] <- y
     }
@@ -578,10 +580,10 @@ randomgraph <- function(networks, nsim = 100) {
 gof.btergm <- function(model, target = NULL, formula = getformula(model), 
     nsim = 100, MCMC.interval = 10000, MCMC.burnin = 10000, 
     parallel = c("no", "MPI", "SOCK"), ncpus = detectCores() - 1, cl = NULL, 
-    classicgof = TRUE, rocprgof = TRUE, checkdegeneracy = TRUE, dsp = TRUE, 
-    esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, odegree = TRUE, 
-    kstar = TRUE, istar = TRUE, ostar = TRUE, pr.impute = "poly4", 
-    verbose = TRUE, ...) {
+    classicgof = TRUE, rocprgof = TRUE, checkdegeneracy = TRUE, 
+    dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, 
+    odegree = TRUE, kstar = TRUE, istar = TRUE, ostar = TRUE, 
+    pr.impute = "poly4", verbose = TRUE, ...) {
   
   if (nsim < 2) {
     stop("The 'nsim' argument must be greater than 1.")
@@ -594,7 +596,7 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
     degensim <- list()
   }
   
-  # extract response networks,  time steps, num.vertices
+  # extract response networks,  time steps, num.vertices, directed, bipartite
   networks.0238207531 <- eval(parse(text = deparse(formula[[2]])))
   if (class(networks.0238207531) == "network" || 
       class(networks.0238207531) == "matrix") {
@@ -603,6 +605,24 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
   time.steps <- length(networks.0238207531)
   num.vertices <- max(sapply(networks.0238207531, 
       function(model) get.network.attribute(network(model), "n")))
+  
+  if (is.network(networks.0238207531[[1]])) {
+    directed <- is.directed(networks.0238207531[[1]])
+    bipartite <- is.bipartite(networks.0238207531[[1]])
+  } else {
+    if (length(table(as.matrix(networks.0238207531[[1]]) == t(as.matrix(
+        networks.0238207531[[1]])))) > 1) {
+      directed <- TRUE
+    } else {
+      directed <- FALSE
+    }
+    if (nrow(as.matrix(networks.0238207531[[1]])) != ncol(as.matrix(
+        networks.0238207531[[1]]))) {
+      bipartite <- TRUE
+    } else {
+      bipartite <- FALSE
+    }
+  }
   
   # check and rearrange target network(s)
   if (is.null(target)) {
@@ -658,10 +678,12 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
           gsub("\\s+", " ", paste(deparse(form), collapse = "")), "\n"))
       if (parallel[1] == "no") {
         sim[[index]] <- simulate.formula(form, nsim = nsim, coef = coef(model), 
+            constraints = ~ ., 
             control = control.simulate.formula(MCMC.interval = MCMC.interval, 
             MCMC.burnin = MCMC.burnin))
       } else if (parallel[1] == "SOCK" || parallel[1] == "MPI") {
         sim[[index]] <- simulate.formula(form, nsim = nsim, coef = coef(model), 
+            constraints = ~ ., 
             control = control.simulate.formula(MCMC.interval = MCMC.interval, 
             MCMC.burnin = MCMC.burnin, parallel = ncpus, 
             parallel.type = parallel))
@@ -710,8 +732,19 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
     rm(degen)
   }
   
-  networks.0238207531 <- lapply(networks.0238207531, network)
-  target <- lapply(target, network)
+  # if NA in target networks, put them in the base network, too, and vice-versa
+  if (length(networks.0238207531) == length(target)) {
+    for (i in 1:time.steps) {
+      networks.0238207531[[i]] <- as.matrix(networks.0238207531[[i]])
+      networks.0238207531[[i]][is.na(as.matrix(target[[i]]))] <- NA
+      networks.0238207531[[i]] <- network(networks.0238207531[[i]], 
+          directed = directed, bipartite = bipartite)
+      target[[i]] <- as.matrix(target[[i]])
+      target[[i]][is.na(as.matrix(networks.0238207531[[i]]))] <- NA
+      target[[i]] <- network(target[[i]], directed = directed, 
+          bipartite = bipartite)
+    }
+  }
   
   # create an object where the final results are stored
   gofobject <- list()
@@ -1275,34 +1308,36 @@ plot.btergmgof <- function(x, boxplot = TRUE, boxplot.mfrow = TRUE,
   if (!is.null(x$roc) && roc == TRUE && pr == FALSE) {  # plot only ROC
     plot(x$roc, avg = rocpr.avg[1], spread.estimate = rocpr.spread[1], 
         add = rocpr.add, col = roc.col, main = roc.main, lwd = rocpr.lwd, 
-        boxplot.boxcol = roc.col, ...)
+        boxplot.boxcol = roc.col, ylim = c(0, 1), ...)
     if (roc.random == TRUE) {
       plot(x$rgraph.roc, avg = rocpr.avg[1], spread.estimate = "none", 
-          col = roc.random.col, add = TRUE, lwd = rocpr.lwd, ...)
+          col = roc.random.col, add = TRUE, lwd = rocpr.lwd, ylim = c(0, 1), 
+          ...)
     }
   } else if (!is.null(x$pr) && roc == FALSE && pr == TRUE) {  # plot only PR
     plot(x$pr, avg = rocpr.avg[1], spread.estimate = rocpr.spread[1], 
         add = rocpr.add, col = pr.col, main = pr.main, lwd = rocpr.lwd, 
-        boxplot.boxcol = pr.col, ...)
+        boxplot.boxcol = pr.col, ylim = c(0, 1), ...)
     if (pr.random == TRUE) {
       plot(x$rgraph.pr, avg = rocpr.avg[1], spread.estimate = "none", 
-          col = pr.random.col, add = TRUE, lwd = rocpr.lwd, ...)
+          col = pr.random.col, add = TRUE, lwd = rocpr.lwd, ylim = c(0, 1), ...)
     }
   } else if (!is.null(x$roc) && !is.null(x$pr) && roc == TRUE && pr == TRUE) {
     plot(x$roc, avg = rocpr.avg[1], spread.estimate = rocpr.spread[1], 
         add = rocpr.add, col = roc.col, main = roc.main, lwd = rocpr.lwd, 
-        boxplot.boxcol = roc.col, ...)
+        boxplot.boxcol = roc.col, ylim = c(0, 1), ...)
     if (roc.random == TRUE) {
       plot(x$rgraph.roc, avg = rocpr.avg[1], spread.estimate = "none", 
-          col = roc.random.col, add = TRUE, lwd = rocpr.lwd, ...)
+          col = roc.random.col, add = TRUE, lwd = rocpr.lwd, ylim = c(0, 1), 
+          ...)
     }
     par(ask = TRUE)
     plot(x$pr, avg = rocpr.avg[1], spread.estimate = rocpr.spread[1], 
         add = rocpr.add, col = pr.col, main = pr.main, lwd = rocpr.lwd, 
-        boxplot.boxcol = pr.col, ...)
+        boxplot.boxcol = pr.col, ylim = c(0, 1), ...)
     if (pr.random == TRUE) {
       plot(x$rgraph.pr, avg = rocpr.avg[1], spread.estimate = "none", 
-          col = pr.random.col, add = TRUE, lwd = rocpr.lwd, ...)
+          col = pr.random.col, add = TRUE, lwd = rocpr.lwd, ylim = c(0, 1), ...)
     }
   }
   if (pr == TRUE && !is.null(x$pr) && pr.poly > 0) {
