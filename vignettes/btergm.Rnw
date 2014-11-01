@@ -38,7 +38,7 @@
 \newcommand{\proglang}[1]{\textbf{#1}}
 \newcommand{\code}[1]{\texttt{#1}}
 
-\title{Estimating Temporal Exponential Random Graph Models by Bootstrapped Pseudolikelihood\\ \bigskip \Large \texttt{R} package vignette for \pkg{xergm} 1.1}
+\title{Estimating Temporal Exponential Random Graph Models by Bootstrapped Pseudolikelihood\\ \bigskip \Large \texttt{R} package vignette for \pkg{xergm} 1.2}
 
 \author[$\ast$]{Philip Leifeld}
 \author[$\dag$]{Skyler J.\ Cranmer}

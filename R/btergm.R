@@ -24,7 +24,7 @@ setClass(Class = "btergm",
         formula = "formula",
         response = "integer",
         effects = "data.frame", 
-        weights = "integer"
+        weights = "numeric"
     ), 
     validity = function(object) {
         if (!"numeric" %in% class(object@coef)) {
@@ -60,8 +60,8 @@ setClass(Class = "btergm",
         if (length(object@response) != nrow(object@effects)) {
           stop("'response' and 'effects' must have the same length.")
         }
-        if (!is.integer(object@weights)) {
-          stop("'weights' must consist of 'integer' values.")
+        if (!is.numeric(object@weights)) {
+          stop("'weights' must consist of 'integer' or 'numeric' values.")
         }
         return(TRUE)
     }
@@ -142,6 +142,9 @@ setMethod(f = "confint", signature = "btergm", definition = function(object,
       parm <- pnames[parm]
     }
     samples <- object@bootsamp[complete.cases(object@bootsamp), ]
+    if (class(samples) == "numeric") {  # only one model term
+      samples <- as.matrix(samples, ncol = 1)
+    }
     n.orig <- nrow(object@bootsamp)
     n.ret <- nrow(samples)
     perc <- 100 * (n.orig - n.ret) / n.orig

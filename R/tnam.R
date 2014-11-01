@@ -189,6 +189,8 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
     } else {
       stop("Data type of the 'networks' argument could not be recognized.")
     }
+  } else if (class(y) == "matrix") {
+    stop("The data type of the 'y' argument is 'matrix'. This is not allowed.")
   } else {
     stop("Data type of the 'y' argument could not be recognized.")
   }
@@ -950,6 +952,119 @@ clustering <- function(networks, directed = TRUE, lag = 0, center = FALSE,
   }
   label <- paste0("clustering", coeflabel, laglabel)
   dat <- data.frame(lcc, time = time, node = objects$nodelabels)
+  dat$node <- as.character(dat$node)
+  colnames(dat)[1] <- label
+  attributes(dat)$lag <- lag
+  return(dat)
+}
+
+
+# spatial lag for k-clique co-members
+cliquelag <- function(y, networks, k.min = 2, k.max = Inf, directed = TRUE, 
+    lag = 0, normalization = c("no", "row", "column"), center = FALSE, 
+    coefname = NULL) {
+  
+  # check arguments
+  if (!is.numeric(lag)) {
+    stop("The 'lag' argument must be an integer value or vector of integers.")
+  }
+  if (is.null(k.min) || !is.numeric(k.min) || length(k.min) > 1) {
+    stop("The 'k.min' argument must be a single numeric value.")
+  }
+  if (is.null(k.max) || !is.numeric(k.max) || length(k.max) > 1) {
+    stop("The 'k.max' argument must be a single numeric value.")
+  }
+  if (k.max < k.min) {
+    stop("'k.min' must be smaller than 'k.max'.")
+  }
+  if (floor(k.min) != k.min || floor(k.max) != k.max) {
+    stop("The 'k.min' and 'k.max' arguments should be integer values.")
+  }
+  if (directed == TRUE) {
+    mode <- "digraph"
+  } else {
+    mode <- "graph"
+  }
+  
+  # get data in the right shape
+  objects <- checkDataTypes(y = y, networks = networks, lag = lag)
+  
+  # do the computations
+  results <- list()  # will contain vectors of results for each time step
+  for (k in 1:objects$time.steps) {
+    # retrieve clique comembership matrices by clique size
+    w3d <- clique.census(objects$networks[[k]], mode = mode, 
+        clique.comembership = "bysize", tabulate.by.vertex = FALSE, 
+        enumerate = FALSE)$clique.comemb
+    k.max <- min(c(k.max, dim(w3d)[1]))
+    w <- matrix(0, nrow = nrow(objects$networks[[k]]), 
+        ncol = ncol(objects$networks[[k]]))
+    for (i in k.min:k.max) {  # sum up three-cliques, four-cliques etc.
+      w <- w + w3d[i, , ]
+    }
+    diag(w) <- 0  # diagonal is not valid (self-cliques...)
+    if (normalization[1] == "row") {  # row norm. = average clique alter effect
+      for (i in 1:nrow(w)) {
+        rs <- rowSums(w)[i]
+        for (j in 1:ncol(w)) {
+          normalized <- w[i, j] / rs
+          if (is.nan(normalized)) {
+            normalized <- 0
+          }
+          w[i, j] <- normalized
+        }
+      }
+    } else if (normalization[1] == "column") {
+      for (i in 1:nrow(w)) {
+        for (j in 1:ncol(w)) {
+          cs <- colSums(w)[j]
+          normalized <- w[i, j] / cs
+          if (is.nan(normalized)) {
+            normalized <- 0
+          }
+          w[i, j] <- normalized
+        }
+      }
+    }
+    results[[k]] <- w %*% objects$y[[k]]
+  }
+  
+  # convert list of results into data frame and add time and response columns
+  response <- numeric()
+  time <- numeric()
+  cliquelag <- numeric()
+  for (i in 1:objects$time.steps) {
+    time <- c(time, rep(i, objects$n[[i]]))
+    response <- c(response, objects$y[[i]])
+    if (center == TRUE) {
+      results[[i]] <- results[[i]] - mean(results[[i]], na.rm = TRUE)
+    }
+    cliquelag <- c(cliquelag, results[[i]])
+  }
+  
+  # create the label
+  if (length(lag) == 1 && lag == 0) {
+    laglabel <- ""
+  } else {
+    laglabel <- paste0(".lag", paste(lag, collapse = "."))
+  }
+  if (normalization[1] == "row") {
+    normlabel <- ".rownorm"
+  } else if (normalization[1] == "column" || normalization[1] == "col") {
+    normlabel <- ".colnorm"
+  } else {
+    normlabel <- ""
+  }
+  klabel <- paste0(".k.", k.min, ".", k.max)
+  if (is.null(coefname) || !is.character(coefname) || length(coefname) > 1) {
+    coeflabel <- ""
+  } else {
+    coeflabel <- paste0(".", coefname)
+  }
+  label <- paste0("cliquelag", coeflabel, klabel, laglabel, normlabel)
+  
+  dat <- data.frame(cliquelag, time = time, node = objects$nodelabels, 
+      response = response)
   dat$node <- as.character(dat$node)
   colnames(dat)[1] <- label
   attributes(dat)$lag <- lag

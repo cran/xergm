@@ -89,7 +89,7 @@ summary(model1)
 
 # for nice table output, use the texreg package
 library("texreg")
-screenreg(model1, naive = TRUE)
+screenreg(model1)
 }
 \seealso{
 \link{xergm-package} \link{tnam-terms} \link{preprocess} \link{knecht}

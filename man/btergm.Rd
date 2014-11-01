@@ -1,13 +1,20 @@
 \name{btergm}
 \alias{btergm}
-\title{TERGM by bootstrapped pseudolikelihood}
-\description{TERGM by bootstrapped pseudolikelihood.}
+\alias{mtergm}
+\alias{tergm}
+\title{TERGM by bootstrapped pseudolikelihood or MCMC MLE}
+\description{TERGM by bootstrapped pseudolikelihood or MCMC MLE.}
 \usage{
 btergm(formula, R = 500, parallel = c("no", "multicore", "snow"), 
     ncpus = getOption("boot.ncpus", 1L), cl = NULL, ...)
+
+mtergm(formula, constraints = ~ ., estimate = c("MLE", "MPLE"), 
+    control = control.ergm(), ...)
 }
 \details{
 The \code{btergm} function computes temporal exponential random graph models (TERGM) by bootstrapped pseudolikelihood, as described in Desmarais and Cranmer (2012).
+
+The \code{mtergm} function computes TERGMs by MCMC MLE (or MPLE with uncorrected standard errors) via blockdiagonal matrices and structural zeros. The \code{btergm} function is faster than the \code{mtergm} function.
 }
 \arguments{
 \item{formula}{ Formula for the TERGM. Model construction works like in the \pkg{ergm} package with the same model terms etc. (for a list of terms, see \code{help("\link[ergm]{ergm-terms}")}). The networks to be modeled on the left-hand side of the equation must be given either as a list of network objects with more recent networks last (i.e., chronological order) or as a list of matrices with more recent matrices at the end. \code{dyadcov} and \code{edgecov} terms accept time-independent covariates (as \code{network} or \code{matrix} objects) or time-varying covariates (as a list of networks or matrices with the same length as the list of networks to be modeled). }
@@ -15,6 +22,9 @@ The \code{btergm} function computes temporal exponential random graph models (TE
 \item{parallel}{ Use multiple cores in a computer or nodes in a cluster to speed up bootstrapping computations. The default value \code{"no"} means parallel computing is switched off. If \code{"multicore"} is used, the \code{mclapply} function from the \pkg{parallel} package (formerly in the \pkg{multicore} package) is used for parallelization. This should run on any kind of system except MS Windows because it is based on forking. It is usually the fastest type of parallelization. If \code{"snow"} is used, the \code{parLapply} function from the \pkg{parallel} package (formerly in the \pkg{snow} package) is used for parallelization. This should run on any kind of system including cluster systems and including MS Windows. It is slightly slower than the former alternative if the same number of cores is used. However, \code{"snow"} provides support for MPI clusters with a large amount of cores, which \pkg{multicore} does not offer (see also the \code{cl} argument). The backend for the bootstrapping procedure is the \pkg{boot} package. }
 \item{ncpus}{ The number of CPU cores used for parallel computing (only if \code{parallel} is activated). If the number of cores should be detected automatically on the machine where the code is executed, one can set \code{ncpus = detectCores()}. On some HPC clusters, the number of available cores is saved as an environment variable; for example, if MOAB is used, the number of available cores can sometimes be accessed using \code{Sys.getenv("MOAB_PROCCOUNT")}, depending on the implementation. }
 \item{cl}{ An optional \pkg{parallel} or \pkg{snow} cluster for use if \code{parallel = "snow"}. If not supplied, a cluster on the local machine is created temporarily. }
+\item{constraints}{ Constraints of the ERGM. See \code{\link[ergm]{ergm}} for details. }
+\item{estimate}{ Estimation procedure of the ERGM. MCMC MLE by default, but MPLE with uncorrected standard errors is possible. See \code{\link[ergm]{ergm}} for details. }
+\item{control}{ Control arguments for the ERGM. See \code{\link[ergm]{ergm}} for details. }
 \item{...}{ Further arguments to be handed over to subroutines. }
 }
 \references{
@@ -60,6 +70,15 @@ fit <- btergm(networks ~ edges + istar(2) +
     edgecov(covariates), R = 100)
 
 summary(fit)               # show estimation results
+
+\dontrun{
+# The same example using MCMC MLE:
+
+fit2 <- mtergm(networks ~ edges + istar(2) + 
+    edgecov(covariates))
+
+summary(fit2)
+}
 
 # For an example with real data, see help("knecht").
 

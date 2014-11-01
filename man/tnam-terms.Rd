@@ -10,6 +10,7 @@
 \alias{centrality}
 \alias{degreedummy}
 \alias{clustering}
+\alias{cliquelag}
 \alias{interact}
 \alias{attribsim}
 \docType{methods}
@@ -38,7 +39,7 @@
 \section{Model terms for \code{\link{tnam}}}{
   \describe{
     
-    \item{\code{attribsim}}{\emph{Spatial lag based on attribute 
+    \item{attribsim}{\emph{Spatial lag based on attribute 
     similarity}
     The \code{attribsim} model term computes a similarity matrix 
     based on the \code{attribute} argument and uses this similarity 
@@ -62,13 +63,27 @@
     may be inclined to learn from each other's behavior, even in 
     the absence of a direct connection between them.}
     
-    \item{\code{centrality}}{\emph{Node centrality}
+    \item{centrality}{\emph{Node centrality}
     The \code{centrality} model term computes a centrality index 
     for the nodes in a network or matrix. This can capture important 
     structural effects because being central often implies certain 
     constraints or opportunities more peripheral nodes do not have. 
     For example, central nodes in a network of employees might be 
     able to perform better.}
+    
+    \item{cliquelag}{\emph{Spatial lag of k-clique co-members}
+    The \code{cliquelag} model term computes a clique co-membership 
+    matrix and multiplies this matrix with the outcome variable. The 
+    intuition behind this is that in some settings individuals may 
+    be influenced to a particularly strong extent by peers in the 
+    same cliques. A clique is defined as a maximal connected 
+    subgraph of size k. For example, a deviant behavior of a person 
+    may be conditioned by the deviant behavior of the person's 
+    friends -- but only if these friends are tied to each other as 
+    well so that a clique among these persons exists. A minimal and 
+    a maximal \code{k} may be defined, where \code{k} is the size 
+    of the cliques. In the clique co-membership matrix, all cliques 
+    with \code{k.min <= k <= k.max} are included.}
     
     \item{clustering}{\emph{Local clustering coefficient}, or 
     \emph{transitivity}
@@ -156,6 +171,10 @@ centrality(networks, type = c("indegree", "outdegree", "freeman",
     "information", "load"), directed = TRUE, lag = 0, 
     rescale = FALSE, center = FALSE, coefname = NULL, ...)
 
+cliquelag(y, networks, k.min = 2, k.max = Inf, directed = TRUE, 
+    lag = 0, normalization = c("no", "row", "column"), 
+    center = FALSE, coefname = NULL)
+
 clustering(networks, directed = TRUE, lag = 0, center = FALSE, 
     coefname = NULL, ...)
 
@@ -188,11 +207,13 @@ weightlag(y, networks, lag = 0, normalization = c("no", "row",
   \item{deg}{The degree (e.g., \code{deg = 2}) or degree range (e.g., \code{deg = 1:3}).}
   \item{directed}{Is the input matrix or network a directed network?}
   \item{exponent}{The exponent of a covariate. For example, \code{exponent = 2} creates a squared variable. This may be helpful for modeling non-linear effects or for modeling a quadratic behavior shape.}
+  \item{k.max}{Maximal clique size.}
+  \item{k.min}{Minimal clique size.}
   \item{lag}{The temporal lag. The default value 0 means there is no lag. A value of 1 would specify a single-period lag, that is, current behavior is modeled conditional on previous influence. A value of 2 would specify a two-period lag, that is, current behavior is modeled conditional on pre-previous influence, etc.}
   \item{match}{If \code{match = FALSE}, a similarity matrix is computed by subtracting node j's attribute value from node i's attribute value, standardizing the resulting distance between 0 and 1, and converting it into a similarity by subtracting it from 1. This similarity matrix is used as a weight matrix to compute a spatial lag. If \code{match = TRUE} is specified, the weight matrix contains values of 1 whenever node i and j have the same attribute value and 0 otherwise.}
   \item{method}{The distance function used for computing structural similarity. Possible values are \code{"euclidean"}, \code{"minkowski"}, \code{"jaccard"}, \code{"binary"}, and \code{"hamming"}.}
   \item{networks}{The network(s) for computing the peer influence, also known as the weight matrix. This can be a matrix or a network object (for a single time step) or a list of matrices or network objects (for multiple time steps).}
-  \item{normalization}{Possible values: \code{"no"} for switching off normalization, \code{"row"} for row normalization of the weight matrix, and \code{"column"} for column normalization of the weight matrix.}
+  \item{normalization}{Possible values: \code{"no"} for switching off normalization, \code{"row"} for row normalization of the weight matrix, and \code{"column"} for column normalization of the weight matrix. If \code{"no"} is selected, this corresponds to the total similarity or the sum of all influences of alters. If \code{"row"} is selected, this corresponds to the average alter effect. }
   \item{pathdist}{An integer or a vector of integers. For example, if \code{pathdist = 1} is used, this computes the sum of the behavior of adjacent nodes. If \code{pathdist = 2} is specified, this computes the effect of indirect paths of length 2 ("friends of friends"). If \code{pathdist = 1:2} is set, both directly connected nodes' behavior and the behavior of nodes at a path distance of 2 from the focal node are counted. See also the \code{decay} argument.}
   \item{reciprocal}{If \code{reciprocal = TRUE} is specified, only the behavior of nodes to which a reciprocal relation exists is counted (that is, a link in both directions).}
   \item{rescale}{Should the centrality index be rescaled between 0 and 1?}

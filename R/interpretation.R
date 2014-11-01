@@ -1,13 +1,7 @@
 
-# TODO: sample function or argument (or use full population of ties?)
-# TODO: cross-temporal probabilities
-# TODO: check results of PSJ article
-
-
-
 # generic interpretation function
 setGeneric("interpret", function(object, ...) standardGeneric("interpret"), 
-    package = "btergm")
+    package = "xergm")
 
 
 # interpretation function for ergm objects
@@ -148,7 +142,6 @@ interpret.btergm <- function(object, formula = object@formula,
     ...) {
   
   # extract response networks and adjust formula
-  #networks <- eval(parse(text = deparse(formula[[2]])))
   networks <- network
   if (class(networks) == "network" || class(networks) == "matrix") {
     networks <- list(networks)

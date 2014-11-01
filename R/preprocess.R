@@ -36,7 +36,7 @@ is.mat.directed <- function(mat) {
       && any(rownames(mat) != colnames(mat))) {
     return(FALSE)
   } else {
-    if (any(mat != t(mat))) {
+    if (any(!is.na(mat) && mat != t(mat))) {
       return(TRUE)
     } else {
       return(FALSE)
@@ -63,6 +63,10 @@ handleMissings <- function(mat, na = NA, method = "remove", logical = FALSE) {
     # vector --> wrap in list
     initialtype <- class(mat)
     mat <- list(mat)
+  } else if (is.function(mat)) {
+    stop(paste("The input object is a function. Did you choose a name", 
+        "for the input object which already exists as a function in the", 
+        "workspace?"))
   } else {
     stop("The 'mat' argument is not valid.")
   }
@@ -638,7 +642,7 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
 # handle missing data and absent nodes for multiple time points with lags
 preprocess <- function(object, ..., lag = FALSE, covariate = FALSE, 
     memory = c("no", "autoregression", "stability", "innovation"), na = NA, 
-    na.method = "fillmode", structzero = NA, structzero.method = "remove", 
+    na.method = "fillmode", structzero = -9, structzero.method = "remove", 
     verbose = FALSE) {
   
   # save objects in a list
@@ -650,8 +654,8 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
       l <- l[-which(names(l) == arg[i])]
     }
   }
-  for (i in 1:length(l)) {
-    l[[i]] <- eval(l[[i]])  # save the objects in list, not just the names
+  for (i in 1:length(l)) {  # save the objects in list, not just the names
+    l[[i]] <- eval(l[[i]], envir = .GlobalEnv)
     if (class(l[[i]]) != "list") {
       l[[i]] <- list(l[[i]])
     }
@@ -671,6 +675,9 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
       for (j in 2:t) {
         l[[i]][[j]] <- l[[i]][[1]]
       }
+    }
+    if (length(l[[i]]) != t) {
+      stop(paste("Object", i, "does not contain the right number of elements."))
     }
   }
   
@@ -700,8 +707,8 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
         }
       } else if (is.vector(l[[i]][[j]]) && length(l[[i]][[j]]) > largest.nr && 
           !is.null(names(l[[i]][[j]]))) {
-        largest.nr <- nrow(l[[i]][[j]])
-        largest.row.labels <- rownames(l[[i]][[j]])
+        largest.nr <- length(l[[i]][[j]])
+        largest.row.labels <- names(l[[i]][[j]])
       }
     }
   }

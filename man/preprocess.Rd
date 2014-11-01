@@ -6,7 +6,7 @@
 preprocess(object, ..., lag = FALSE, covariate = FALSE, 
     memory = c("no", "autoregression", "stability", 
     "innovation"), na = NA, na.method = "fillmode", 
-    structzero = NA, structzero.method = "remove", 
+    structzero = -9, structzero.method = "remove", 
     verbose = FALSE)
 }
 \details{

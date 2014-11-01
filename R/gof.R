@@ -615,6 +615,8 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
       directed <- TRUE
     } else {
       directed <- FALSE
+      stop(paste("The dependent networks seem to be undirected. In this", 
+          "case, please store them as a list of network objects."))
     }
     if (nrow(as.matrix(networks.0238207531[[1]])) != ncol(as.matrix(
         networks.0238207531[[1]]))) {
@@ -996,7 +998,7 @@ gof.sienaAlgorithm <- function(model, siena.data, siena.effects,
   # this function carries out one simulation at a time (for parallelization)
   simSiena <- function(q, mymodel, mydata, myeffects, mybase, mydvname, ...) {
     require("RSiena")
-    ans <- siena07(mymodel, data = mydata, effects = myeffects, 
+    ans <- RSiena::siena07(mymodel, data = mydata, effects = myeffects, 
         batch = TRUE, verbose = FALSE, silent = TRUE, returnDeps = TRUE, ...)
     simul <- networkExtraction(i = length(ans$sims), obsData = ans$f,
         sims = ans$sims, period = mybase, groupName = "Data1", 
