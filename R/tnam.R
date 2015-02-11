@@ -36,12 +36,18 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
       y[[i]] <- rep(NA, nrow(networks[[i]]))
     }
   } else if (class(y) == "list") {
+    for (i in 1:length(y)) {
+      if (is.integer(y[[i]])) {
+        y[[i]] <- as.numeric(y[[i]])
+      }
+    }
     if (is.null(networks)) {
       # insert NA matrices into new list
       networks <- list()
       for (i in 1:length(y)) {
         networks[[i]] <- matrix(NA, nrow = length(y[[i]]), 
             ncol = length(y[[i]]))
+        names(networks[[i]]) <- names(y[[i]])
       }
     } else if (class(networks) == "list") {
       # OK; do nothing
@@ -50,8 +56,9 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
       networks <- list(as.matrix(networks))
       if (length(y) > 1) {
         for (i in 2:length(y)) {
-          networks[[i]] <- matrix(NA, nrow = length(y[[i]]), 
-              ncol = length(y[[i]]))
+          #networks[[i]] <- matrix(NA, nrow = length(y[[i]]), 
+          #    ncol = length(y[[i]]))
+          networks[[i]] <- as.matrix(networks)
         }
       }
     } else if (class(networks) == "matrix") {
@@ -59,8 +66,9 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
       networks <- list(networks)
       if (length(y) > 1) {
         for (i in 2:length(y)) {
-          networks[[i]] <- matrix(NA, nrow = length(y[[i]]), 
-              ncol = length(y[[i]]))
+          #networks[[i]] <- matrix(NA, nrow = length(y[[i]]), 
+          #    ncol = length(y[[i]]))
+          networks[[i]] <- as.matrix(networks)
         }
       }
     } else {
@@ -72,7 +80,12 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
     } else {
       time.steps <- length(y)
     }
-  } else if (class(y) == "numeric" ) {
+  } else if (class(y) == "numeric" || class(y) == "integer") {
+    if (class(y) == "integer") {
+      nam <- names(y)
+      y <- as.numeric(y)
+      names(y) <- nam
+    }
     y <- list(y)  # wrap y in list
     time.steps <- 1
     if (is.null(networks)) {
@@ -142,12 +155,16 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
       # insert NA matrices into new list
       networks <- list()
       for (i in 1:length(y)) {
-        networks[[i]] <- matrix(NA, nrow = nrow(y), ncol = nrow(y))
+        mat <- matrix(NA, nrow = nrow(y), ncol = nrow(y))
+        rownames(mat) <- rownames(y)
+        networks[[i]] <- mat
       }
       # convert y data frame to a list
       l <- list()
       for (i in 1:ncol(y)) {
-        if (!is.numeric(y[, i])) {
+        if (is.integer(y[, i])) {
+          y[, i] <- as.numeric(y[, i])
+        } else if (!is.numeric(y[, i])) {
           stop(paste("Column", i, "of argument 'y' is not numeric."))
         }
         l[[i]] <- y[, i]
@@ -287,37 +304,9 @@ netlag <- function(y, networks, lag = 0, pathdist = 1,
   results <- list()  # will contain vectors of results for each time step
   for (k in 1:objects$time.steps) {
     pdistmat <- geodist(objects$networks[[k]], ...)$gdist  # path dist mat.
-    result <- rep(0, nrow(objects$networks[[k]]))  # result vector with 0s
-    if (normalization[1] == "no") {
-      normal <- 1
-    }
-    for (i in 1:nrow(objects$networks[[k]])) {
-      if (normalization[1] == "row") {
-        normal <- rowSums(objects$networks[[k]])[i]
-      }
-      for (j in 1:ncol(objects$networks[[k]])) {
-        if (normalization[1] == "column") {
-          normal <- colSums(objects$networks[[k]])[j]
-        }
-        if (normal == 0) {  # avoid division by zero
-          normal <- 1
-        }
-        if ((reciprocal == TRUE && objects$networks[[k]][i, j] == 
-            objects$networks[[k]][j, i]) || reciprocal == FALSE) {
-          recip <- 1
-        } else {
-          recip <- 0
-        }
-        if (pdistmat[i, j] %in% pathdist) {
-          pdist <- pdistmat[i, j]
-          decay.index <- which(pdist == pathdist)
-          dec <- decay[decay.index]
-          value <- objects$y[[k]][j]
-          result[i] <- result[i] + ((value / normal) * dec * recip)
-        }
-      }
-    }
-    results[[k]] <- result
+    results[[k]] <- suppressWarnings(netLagCppLoop(objects$networks[[k]], 
+        pdistmat, pathdist, decay, objects$y[[k]], normalization[1], 
+        reciprocal))  # netlag loop in C++
   }
   
   # convert list of results into data frame and add time and response columns
@@ -475,11 +464,14 @@ attribsim <- function(y, attribute, match = FALSE, lag = 0,
     for (j in 1:length(attrib[[i]])) {
       for (k in 1:length(attrib[[i]])) {
         if (match == TRUE) {  # node match on the attribute: 1 if both the same
-          if (attrib[[i]][j] == attrib[[i]][k]) {
+          if (!is.na(attrib[[i]][j]) && !is.na(attrib[[i]][k]) && 
+              attrib[[i]][j] == attrib[[i]][k]) {
             mat[j, k] <- 1
           } else {
             mat[j, k] <- 0
           }
+        } else if (is.na(attrib[[i]][j]) || is.na(attrib[[i]][k])) {
+          mat[j, k] <- NA
         } else {  # absolute dissimilarity
           mat[j, k] <- abs(attrib[[i]][j] - attrib[[i]][k])
         }
@@ -695,7 +687,8 @@ structsim <- function(y, networks, lag = 0, method = c("euclidean",
     } else if (method[1] == "binary") {
       d <- as.matrix(dist(objects$networks[[k]], method = method[1], ...))
     } else if (method[1] == "jaccard") {
-      d <- as.matrix(vegdist(objects$networks[[k]], method = "jaccard", ...))
+      d <- as.matrix(vegdist(objects$networks[[k]], method = "jaccard", 
+          na.rm = TRUE, ...))
     } else if (method[1] == "hamming") {
       d <- sedist(objects$networks[[k]], method = "hamming", ...) / 
           nrow(objects$networks[[k]])  # standardize to [0; 1]
@@ -992,6 +985,10 @@ cliquelag <- function(y, networks, k.min = 2, k.max = Inf, directed = TRUE,
   # do the computations
   results <- list()  # will contain vectors of results for each time step
   for (k in 1:objects$time.steps) {
+    if (any(is.na(objects$networks[[k]])) && packageVersion("sna") <= "2.3-2") {
+      stop(paste("Due to a bug in the 'sna' package, the 'cliquelag' function", 
+          "is currently not compatible with network matrices with NA values."))
+    }
     # retrieve clique comembership matrices by clique size
     w3d <- clique.census(objects$networks[[k]], mode = mode, 
         clique.comembership = "bysize", tabulate.by.vertex = FALSE, 

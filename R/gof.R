@@ -542,7 +542,7 @@ rocprgof <- function(gofobject, simulations, target, missingmatrix = NULL,
 setGeneric("getformula", function(x) standardGeneric("getformula"), 
     package = "btergm")
 
-setMethod("getformula", signature = className("btergm", "btergm"), 
+setMethod("getformula", signature = className("btergm", "xergm"), 
     definition = function(x) x@formula)
 
 setMethod("getformula", signature = className("ergm", "ergm"), 
@@ -577,9 +577,9 @@ randomgraph <- function(networks, nsim = 100) {
 
 
 # GOF function for in-sample and out-of-sample GOF assessment
-gof.btergm <- function(model, target = NULL, formula = getformula(model), 
-    nsim = 100, MCMC.interval = 10000, MCMC.burnin = 10000, 
-    parallel = c("no", "MPI", "SOCK"), ncpus = detectCores() - 1, cl = NULL, 
+gof.btergm <- function(object, target = NULL, formula = getformula(object), 
+    nsim = 100, MCMC.interval = 1000, MCMC.burnin = 10000, 
+    parallel = c("no", "MPI", "SOCK"), ncpus = 1, cl = NULL, 
     classicgof = TRUE, rocprgof = TRUE, checkdegeneracy = TRUE, 
     dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, 
     odegree = TRUE, kstar = TRUE, istar = TRUE, ostar = TRUE, 
@@ -604,7 +604,7 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
   }
   time.steps <- length(networks.0238207531)
   num.vertices <- max(sapply(networks.0238207531, 
-      function(model) get.network.attribute(network(model), "n")))
+      function(object) get.network.attribute(network(object), "n")))
   
   if (is.network(networks.0238207531[[1]])) {
     directed <- is.directed(networks.0238207531[[1]])
@@ -679,13 +679,13 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
           "networks from the following formula:\n", 
           gsub("\\s+", " ", paste(deparse(form), collapse = "")), "\n"))
       if (parallel[1] == "no") {
-        sim[[index]] <- simulate.formula(form, nsim = nsim, coef = coef(model), 
-            constraints = ~ ., 
+        sim[[index]] <- simulate.formula(form, nsim = nsim, 
+            coef = coef(object), constraints = ~ ., 
             control = control.simulate.formula(MCMC.interval = MCMC.interval, 
             MCMC.burnin = MCMC.burnin))
       } else if (parallel[1] == "SOCK" || parallel[1] == "MPI") {
-        sim[[index]] <- simulate.formula(form, nsim = nsim, coef = coef(model), 
-            constraints = ~ ., 
+        sim[[index]] <- simulate.formula(form, nsim = nsim, 
+            coef = coef(object), constraints = ~ ., 
             control = control.simulate.formula(MCMC.interval = MCMC.interval, 
             MCMC.burnin = MCMC.burnin, parallel = ncpus, 
             parallel.type = parallel))
@@ -699,9 +699,10 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
     # compute target stats if degeneracy check is switched on
     if (checkdegeneracy == TRUE) {
       tstats[[index]] <- summary(remove.offset.formula(form), response = NULL)
-      degen[[index]] <- simulate.formula(form, nsim = nsim, coef = coef(model), 
-          statsonly = TRUE, control = control.simulate.formula(
-          MCMC.interval = MCMC.interval, MCMC.burnin = MCMC.burnin))
+      degen[[index]] <- simulate.formula(form, nsim = nsim, 
+          coef = coef(object), statsonly = TRUE, 
+          control = control.simulate.formula(MCMC.interval = MCMC.interval, 
+          MCMC.burnin = MCMC.burnin))
     }
   }
   
@@ -825,31 +826,33 @@ gof.btergm <- function(model, target = NULL, formula = getformula(model),
 
 
 # GOF function for SIENA (creates btergm-compatible GOF objects)
-gof.sienaAlgorithm <- function(model, siena.data, siena.effects, 
+gof.sienaAlgorithm <- function(object, siena.data, siena.effects, 
     predict.period = NULL, nsim = 50, parallel = c("no", "multicore", 
-    "snow"), ncpus = detectCores() - 1, cl = NULL, target.na = NA, 
+    "snow"), ncpus = 1, cl = NULL, target.na = NA, 
     target.na.method = "remove", target.structzero = 10, 
     classicgof = TRUE, rocprgof = TRUE, dsp = TRUE, esp = TRUE, 
     geodist = TRUE, degree = TRUE, idegree = TRUE, odegree = TRUE, 
     kstar = TRUE, istar = TRUE, ostar = TRUE, pr.impute = "poly4", ...) {
   
   # check RSiena version
-  require("RSiena")
+  if (!requireNamespace("RSiena", quietly = TRUE)) {
+    stop("Please install the RSiena package to use this method.")
+  }
   if (packageVersion("RSiena") < as.package_version("1.0.12.169")) {
     stop("RSiena (>= 1.0.12.169) is required.")
   }
   
   # check and prepare arguments for SIENA
-  if ((!"sienaModel" %in% class(model) && packageVersion("RSiena") < 
+  if ((!"sienaModel" %in% class(object) && packageVersion("RSiena") < 
       as.package_version("1.1-227")) || (!"sienaAlgorithm" %in% 
-      class(model) && packageVersion("RSiena") >= 
+      class(object) && packageVersion("RSiena") >= 
       as.package_version("1.1-227"))) {
     if (packageVersion("RSiena") < as.package_version("1.1-227")) {
-      stop(paste("'model' must be an object of class 'sienaModel'.", 
+      stop(paste("'object' must be an object of class 'sienaModel'.", 
           "Please use the sienaModelCreate() function to create such an", 
           "object."))
     } else {
-      stop(paste("'model' must be an object of class 'sienaAlgorithm'.", 
+      stop(paste("'object' must be an object of class 'sienaAlgorithm'.", 
           "Please use the sienaAlgorithmCreate() function to create such an", 
           "object."))
     }
@@ -997,14 +1000,15 @@ gof.sienaAlgorithm <- function(model, siena.data, siena.effects,
   
   # this function carries out one simulation at a time (for parallelization)
   simSiena <- function(q, mymodel, mydata, myeffects, mybase, mydvname, ...) {
-    require("RSiena")
     ans <- RSiena::siena07(mymodel, data = mydata, effects = myeffects, 
         batch = TRUE, verbose = FALSE, silent = TRUE, returnDeps = TRUE, ...)
-    simul <- networkExtraction(i = length(ans$sims), obsData = ans$f,
+    simul <- RSiena::networkExtraction(i = length(ans$sims), obsData = ans$f,
         sims = ans$sims, period = mybase, groupName = "Data1", 
         varName = mydvname)
     if (is.bipartite(simul)) {  # correct directed = TRUE --> FALSE
       simul <- as.network(as.matrix(simul))
+    } else if (isSymmetric(as.matrix(simul)) && is.directed(simul)) {
+      simul <- as.network(as.matrix(simul), directed = FALSE)
     }
     message(paste0("Completed simulation ", q, "."))
     return(simul)
@@ -1016,18 +1020,18 @@ gof.sienaAlgorithm <- function(model, siena.data, siena.effects,
       cl <- makeCluster(ncpus)
     }
     message(paste("Using snow parallelization with", ncpus, "cores."))
-    simulations <- parLapply(cl, 1:nsim, simSiena, mymodel = model, 
+    simulations <- parLapply(cl, 1:nsim, simSiena, mymodel = object, 
         mydata = siena.data, myeffects = siena.effects, mybase = base, 
         mydvname = dvname)
     stopCluster(cl)
   } else if (parallel[1] == "multicore") {
     message(paste("Using multicore parallelization with", ncpus, "cores."))
-    simulations <- mclapply(1:nsim, simSiena, mymodel = model, 
+    simulations <- mclapply(1:nsim, simSiena, mymodel = object, 
         mydata = siena.data, myeffects = siena.effects, mybase = base, 
         mydvname = dvname, mc.cores = ncpus)
   } else {
     message("Parallelization is switched off. Simulating sequentially.")
-    simulations <- lapply(1:nsim, simSiena, mymodel = model, 
+    simulations <- lapply(1:nsim, simSiena, mymodel = object, 
         mydata = siena.data, myeffects = siena.effects, mybase = base, 
         mydvname = dvname)
   }
@@ -1038,6 +1042,18 @@ gof.sienaAlgorithm <- function(model, siena.data, siena.effects,
   gofobject$numbasis <- 1
   gofobject$numtarget <- 1
   gofobject$num.vertices <- simulations[[1]]$gal$n
+  
+  # correct properties of the target network (sloppy Siena programming...)
+  if (is.directed(target[[1]]) && !is.directed(simulations[[1]])) {
+    target[[1]] <- network(as.matrix(target[[1]]), directed = FALSE)
+  } else if (!is.directed(target[[1]]) && is.directed(simulations[[1]])) {
+    target[[1]] <- network(as.matrix(target[[1]]), directed = TRUE)
+  }
+  if (is.bipartite(target[[1]]) && !is.bipartite(simulations[[1]])) {
+    target[[1]] <- network(as.matrix(target[[1]]), bipartite = FALSE)
+  } else if (!is.bipartite(target[[1]]) && is.bipartite(simulations[[1]])) {
+    target[[1]] <- network(as.matrix(target[[1]]), bipartite = TRUE)
+  }
   
   # compute classic goodness of fit
   if (classicgof == TRUE) {
@@ -1071,9 +1087,182 @@ gof.sienaAlgorithm <- function(model, siena.data, siena.effects,
   return(gofobject)
 }
 
+# gof method for dyadic-independence models with custom data and coefficients
+gof.network <- function(object, covariates, coef, target = NULL, 
+    nsim = 100, mcmc = FALSE, MCMC.interval = 1000, 
+    MCMC.burnin = 10000, parallel = c("no", "MPI", "SOCK"), 
+    ncpus = 1, cl = NULL, classicgof = TRUE, rocprgof = TRUE, 
+    dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, 
+    idegree = TRUE, odegree = TRUE, kstar = TRUE, istar = TRUE, 
+    ostar = TRUE, pr.impute = "poly4", verbose = TRUE, ...) {
+  
+  if (nsim < 2) {
+    stop("The 'nsim' argument must be greater than 1.")
+  }
+  
+  # check dependent network
+  nw <- object
+  if (class(nw) == "network") {
+    directed <- is.directed(nw)
+    bipartite <- is.bipartite(nw)
+  } else if (class(nw) == "matrix") {
+    directed <- !isSymmetric(nw)
+    if (nrow(nw) == ncol(nw)) {
+      bipartite <- FALSE
+    } else {
+      bipartite <- TRUE
+    }
+    nw <- network(nw, bipartite = bipartite, directed = directed)
+  } else {
+    stop("'object' must be a network object or a matrix.")
+  }
+  time.steps <- 1
+  num.vertices <- nrow(as.matrix(nw))
+  
+  # check and rearrange target network(s)
+  if (is.null(target)) {
+    message(paste("\nNo 'target' network(s) provided. Using networks on the",
+        "left-hand side of the model formula as observed networks.\n"))
+    target <- nw
+  } else if (class(target) == "network" || class(target) == "matrix") {
+    # do nothing
+    message("\nOne observed ('target') network was provided.\n")
+  } else if (class(target) == "list") {
+    message(paste("\n", length(target), "observed ('target') networks were",
+        "provided. Using the first network\n"))
+    target <- target[[1]]
+    if (class(target) != "matrix" && class(target) != network) {
+      stop("First target network was not a matrix or network object.")
+    }
+  } else {
+    stop("'target' must be a network, matrix, or list of matrices or networks.")
+  }
+  
+  # check predictors and assemble formula
+  if (class(covariates) != "list") {
+    stop("Covariates must be provided as a list of matrices.")
+  }
+  numcov <- length(covariates)
+  if (numcov + 1 != length(coef)) {
+    stop(paste("The 'coef' vector ought to have a coefficient for edges", 
+        "plus the same number of coefficients as there are covariates.", 
+        "Right now, there are", length(coef), "coefficients and", numcov, 
+        "covariates."))
+  }
+  rhs <- "edges"
+  for (i in 1:numcov) {
+    if (!class(covariates[[i]]) %in% c("network", "matrix")) {
+      stop(paste("Covariate", i, "is not a matrix or network object."))
+    }
+    if (nrow(as.matrix(covariates[[i]])) != nrow(as.matrix(nw))) {
+      stop(paste("Number of row nodes of covariate", i, "is not compatible."))
+    }
+    if (ncol(as.matrix(covariates[[i]])) != ncol(as.matrix(nw))) {
+      stop(paste("Number of column nodes of covariate", i, 
+          "is not compatible."))
+    }
+    rhs <- paste(rhs, "+ edgecov(covariates[[", i, "]])")
+  }
+  form <- as.formula(paste("nw ~", rhs))
+  
+  # simulations for statnet-style and rocpr GOF
+  if (classicgof == TRUE || rocprgof == TRUE) {
+    message(paste("Simulating", nsim, 
+        "networks from the following formula:\n", 
+        gsub("\\s+", " ", paste(deparse(form), collapse = "")), "\n"))
+  if (mcmc == TRUE && parallel[1] == "no") {
+    simulations <- simulate.formula(form, nsim = nsim, coef = coef, 
+        constraints = ~ ., 
+        control = control.simulate.formula(MCMC.interval = MCMC.interval, 
+        MCMC.burnin = MCMC.burnin))
+  } else if (mcmc == TRUE && parallel[1] == "SOCK" || parallel[1] == "MPI") {
+    simulations <- simulate.formula(form, nsim = nsim, coef = coef, 
+        constraints = ~ ., 
+        control = control.simulate.formula(MCMC.interval = MCMC.interval, 
+        MCMC.burnin = MCMC.burnin, parallel = ncpus, 
+        parallel.type = parallel))
+  } else if (mcmc == FALSE) {
+    if (parallel[1] != "no") {
+      warning("Parallel computation is only possible with 'mcmc = TRUE'.")
+    }
+    dat <- sapply(covariates, function(x) c(as.matrix(x)))
+    dat <- cbind(rep(1, nrow(dat)), dat)
+    prob <- plogis(coef %*% t(dat))
+    simval <- t(sapply(prob, function(x) rbinom(nsim, 1, x)))
+    simulations <- apply(simval, 2, function(x) network(matrix(x, nrow = 
+        num.vertices, byrow = FALSE), bipartite = bipartite, 
+        directed = directed))
+  } else {
+    stop(paste0("For this type of object, \"SOCK\" and \"MPI\" parallel ", 
+        "processing are allowed. \"", parallel, 
+        "\" is not a valid value for the \"parallel\" argument."))
+    }
+  }
+  
+  # if NA in target networks, put them in the base network, too, and vice-versa
+  nw <- as.matrix(nw)
+  nw[is.na(as.matrix(target))] <- NA
+  nw <- network(nw, directed = directed, bipartite = bipartite)
+  target <- as.matrix(target)
+  target[is.na(as.matrix(nw))] <- NA
+  target <- network(target, directed = directed, bipartite = bipartite)
+  
+  # create an object where the final results are stored
+  gofobject <- list()
+  class(gofobject) <- "btergmgof"
+  gofobject$numbasis <- 1
+  gofobject$numtarget <- 1
+  gofobject$num.vertices <- num.vertices
+  
+  # comparison of simulated and observed network statistics (statnet-style GOF)
+  target <- list(target)
+  if (classicgof == TRUE) {
+    gofobject <- statnetgof(gofobject, simulations, target, dsp = dsp, 
+        esp = esp, geodist = geodist, degree = degree, idegree = idegree, 
+        odegree = odegree, kstar = kstar, istar = istar, ostar = ostar)
+  } else {
+    gofobject$statistics <- NULL
+    gofobject$raw <- NULL
+  }
+  
+  # ROC and PR curves and AUC measures
+  if (rocprgof == TRUE) {
+    gofobject <- rocprgof(gofobject, simulations, target, rgraph = FALSE, 
+        pr.impute = pr.impute)
+    randomgraphs <- randomgraph(list(nw), nsim = nsim)
+    gofobject <- rocprgof(gofobject, randomgraphs, target, rgraph = TRUE, 
+        pr.impute = pr.impute)
+  } else {
+    gofobject$roc <- NULL
+    gofobject$pr <- NULL
+    gofobject$auc.roc <- NULL
+    gofobject$auc.pr <- NULL
+    gofobject$rgraph.roc <- NULL
+    gofobject$rgraph.pr <- NULL
+    gofobject$rgraph.auc.roc <- NULL
+    gofobject$rgraph.auc.pr <- NULL
+  }
+  
+  if ((length(gofobject$auc.roc == 1) && gofobject$auc.roc >= 0.98) || 
+      (length(gofobject$auc.roc > 1) && any(gofobject$auc.roc >= 0.98))) {
+    warning(paste("Extremely high AUC-ROC value(s)! This may be a sign of", 
+        "degenerate MCMC simulations. You should try to tweak the 'nsim',", 
+        "'MCMC.interval', and 'MCMC.burnin' arguments."))
+  }
+  
+  if ((length(gofobject$auc.pr == 1) && gofobject$auc.pr >= 0.98) || 
+      (length(gofobject$auc.pr > 1) && any(gofobject$auc.pr >= 0.98))) {
+    warning(paste("Extremely high AUC-PR value(s)! This may be a sign of", 
+        "degenerate MCMC simulations. You should try to tweak the 'nsim',", 
+        "'MCMC.interval', and 'MCMC.burnin' arguments."))
+  }
+  
+  return(gofobject)
+}
+
 
 # generics for goodness-of-fit assessment
-setGeneric("gof", function(model, ...) standardGeneric("gof"), 
+setGeneric("gof", function(object, ...) standardGeneric("gof"), 
     package = "btergm")
 
 setMethod("gof", signature = className("btergm", "btergm"), 
@@ -1087,6 +1276,12 @@ setMethod("gof", signature = className("sienaAlgorithm", "RSiena"),
 
 setMethod("gof", signature = className("sienaModel", "RSiena"), 
     definition = gof.sienaAlgorithm)
+
+setMethod("gof", signature = className("network", "network"), 
+    definition = gof.network)
+
+setMethod("gof", signature = className("matrix", "base"), 
+    definition = gof.network)
 
 
 # plot method for btergmgof objects

@@ -5,7 +5,7 @@
 \usage{
 preprocess(object, ..., lag = FALSE, covariate = FALSE, 
     memory = c("no", "autoregression", "stability", 
-    "innovation"), na = NA, na.method = "fillmode", 
+    "innovation", "loss"), na = NA, na.method = "fillmode", 
     structzero = -9, structzero.method = "remove", 
     verbose = FALSE)
 }
@@ -23,7 +23,7 @@ If the \code{memory} argument is specified (see below for details on the allowed
 \item{...}{ One or multiple other objects, separated by commas. These are used for comparison. If data are missing in these objects but not in the object of interest (given as the \code{object} argument), the missing data are also removed from the \code{object} of interest. The names of these objects are not allowed to match any of the argument names of this function (e.g., handing over an object with the name \code{memory} will cause an error message). }
 \item{lag}{ Take into account missing or unobserved data at the previous or next time step? Use this argument in conjunction with the \code{covariate} argument. If \code{lag = TRUE} and \code{covariate = TRUE}, the first item in the list is adjusted to the dimensions of the second item, the second item is adjusted to the dimensions of the third item, and so forth, and the last item is omitted because it cannot be used as a covariate anyway. If \code{lag = TRUE} and \code{covariate = FALSE}, the first item is omitted, the second item is adjusted to the dimensions of the first item, the third item is adjusted to the dimensions of the second item, and so forth. If \code{lag = FALSE} (the \code{covariate} argument does not matter in this case), the first item is adjusted to the dimensions of the first item, the second item is adjusted to the dimensions of the second item etc. In all cases, missing data are first removed cross-sectionally across objects. }
 \item{covariate}{ Is the object of interest a covariate or a dependent variable/network? This governs whether forward- or backward-looking missing data adjustment is used (when \code{lag = TRUE} is active). See the entry for \code{lag} for more details. }
-\item{memory}{ Create a memory term which can be used as an edge covariate. Memory terms describe the temporal stability of the network. Several types of memory terms can be created. The default value \code{memory = "no"} will not create a memory term. \code{memory = "stability"} creates a term that captures dyadic stability between one time step and the next. \code{memory = "autoregression"} creates a lagged dependent network and is equivalent to \code{memory = "no"}. The result is a positive autoregression term, which is the lagged dependent network. This captures the stability of edges (but not of non-edges). \code{memory = "innovation"} measures the extent to which new edges are introduced over time ("edge innovation"). The \code{memory} argument only works when \code{lag = TRUE} and \code{covariate = TRUE} are also set. }
+\item{memory}{ Create a memory term which can be used as an edge covariate. Memory terms describe the temporal stability of the network. Several types of memory terms can be created. The default value \code{memory = "no"} will not create a memory term. \code{memory = "stability"} creates a term that captures dyadic stability between one time step and the next. \code{memory = "autoregression"} creates a lagged dependent network and is equivalent to \code{memory = "no"}. The result is a positive autoregression term, which is the lagged dependent network. This captures the stability of edges (but not of non-edges). \code{memory = "innovation"} measures the extent to which new edges are introduced over time ("edge innovation"). \code{memory = "loss"} captues the extent to which previously existing edges are no longer present at each current time step. The \code{memory} argument only works when \code{lag = TRUE} and \code{covariate = TRUE} are also set. }
 \item{na}{ A vector of values that are identified as missing data. These values can be removed or replaced (see the \code{\link{handleMissings}} function). }
 \item{na.method}{ What should be done with missing data? Valid values are \code{remove} and \code{fillmode}. See the \code{\link{handleMissings}} function for details. }
 \item{structzero}{ A vector of values that are identified as structural zeroes. These values can be removed or replaced (see the \code{\link{handleMissings}} function). }
@@ -162,5 +162,5 @@ legend("right", legend = c("ROC", "ROC random graph", "PR",
 }
 }
 \seealso{
-\link{xergm-package} \link{handleMissings} \link{adjust}
+\link{xergm-package} \link{handleMissings} \link{adjust} \link{timecov}
 }

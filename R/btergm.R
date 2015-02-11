@@ -3,11 +3,10 @@
 .onAttach <- function(libname, pkgname) {
   desc  <- packageDescription(pkgname, libname)
   packageStartupMessage(
-    'Package:  xergm\n',
     'Version:  ', desc$Version, '\n', 
     'Date:     ', desc$Date, '\n', 
     'Authors:  Philip Leifeld (University of Konstanz)\n',
-    '          Skyler J. Cranmer (University of North Carolina, Chapel Hill)\n',
+    '          Skyler J. Cranmer (The Ohio State University)\n',
     '          Bruce A. Desmarais (University of Massachusetts, Amherst)'
   )
 }
@@ -273,8 +272,8 @@ preprocessrhs <- function(rhs, time.steps, iterator = "i", dep = NULL) {
 
 
 # TERGM by bootstrapped pseudolikelihood
-btergm <- function(formula, R = 500, parallel = c("no", "multicore", 
-    "snow"), ncpus = getOption("boot.ncpus", 1L), cl = NULL, ...) {
+btergm <- function(formula, R = 500, parallel = c("no", "multicore", "snow"), 
+    ncpus = 1, cl = NULL, ...) {
   
   # extract response networks and adjust formula
   networks <- eval(parse(text = deparse(formula[[2]])))
@@ -323,18 +322,25 @@ btergm <- function(formula, R = 500, parallel = c("no", "multicore",
   x <- X[, 1:(ncol(X) - 1)]
   x <- as.data.frame(x)  # in case there is only one column/model term
   
-  # function for bootstrapping and estimation
-  estimate <- function(unique.time.steps, bsi) {
-    indic <- unlist(lapply(bsi, function(x) which(X$time == x)))
-    xi <- as.matrix(x[indic, ])
-    yi <- Y[indic]
-    wi <- W[indic]
-    esti <- glm(yi ~ -1 + xi, weights = wi, family = binomial)
-    return(coef(esti))
+  # create sparse matrix and compute start values for GLM
+  xsparse <- Matrix(as.matrix(x), sparse = TRUE)
+  est <- speedglm.wfit(y = Y, X = xsparse, 
+      weights = W, family = binomial(link = logit), sparse = TRUE)
+  startval <- coef(est)
+  nobs <- est$n
+  
+  # define function for bootstrapping and estimation
+  estimate <- function(unique.time.steps, bsi, Yi = Y, xsparsei = xsparse, 
+      Wi = W, timei = X$time, startvali = startval) {
+    indic <- unlist(lapply(bsi, function(x) which(timei == x)))
+    return(coef(speedglm.wfit(y = Yi[indic], X = xsparsei[indic, ], 
+        weights = Wi[indic], family = binomial(link = logit), sparse = TRUE, 
+        start = startvali)))
   }
   
   # run the estimation (single-core or parallel)
-  coefs <- boot(unique.time.steps, estimate, R = R, parallel = parallel, 
+  coefs <- boot(unique.time.steps, estimate, R = R, Yi = Y, xsparsei = xsparse, 
+      Wi = W, timei = X$time, startvali = startval, parallel = parallel, 
       ncpus = ncpus, cl = cl, ...)$t
   rm(X)
   if (nrow(coefs) == 1) { # in case there is only one model term
@@ -342,15 +348,11 @@ btergm <- function(formula, R = 500, parallel = c("no", "multicore",
   }
   
   # create and return btergm object
-  est <- glm(Y ~ . -1, data = x, weights = W, family = binomial)
-  nobs <- nobs(est)
-  est <- coef(est)
-  
   colnames(coefs) <- term.names[1:(length(term.names) - 1)]
-  names(est) <- colnames(coefs)
+  names(startval) <- colnames(coefs)
   
-  btergm.object <- createBtergm(est, coefs, R, nobs, time.steps, formula, Y, x, 
-      W)
+  btergm.object <- createBtergm(startval, coefs, R, nobs, time.steps, formula, 
+      Y, x, W)
   return(btergm.object)
 }
 

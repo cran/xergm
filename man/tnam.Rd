@@ -7,9 +7,13 @@
 tnam(formula, family = gaussian, re.node = FALSE, 
     re.time = FALSE, time.linear = FALSE, time.quadratic = FALSE, 
     center.y = FALSE, na.action = na.omit, ...)
+
+tnamdata(formula, center.y = FALSE)
 }
 \details{
 The \code{tnam} function serves to estimate temporal or cross-sectional network autocorrelation models. Model terms such as spatial lags, temporal lags, spatio-temporal lags, centrality etc. can be specified in the \code{formula} argument. Details on the model terms can be found on the \code{\link{tnam-terms}} help page.
+
+The \code{tnamdata} function accepts a formula (like in the \code{tnam} function) and returns a data frame with the response variable and the covariates for estimation with any estimation function. \code{tnam} first calls \code{tnamdata} internally and then hands over the resulting data structure to a \code{glm}, \code{lmer}, or \code{nlmer} call. If models such as tobit, multinomial or multilevel models should be estimated, one can leave out the estimation step and feed the results of \code{tnamdata} manually into any type of model.
 }
 \arguments{
 \item{formula}{ A formula where the left-hand side specifies either a vector containing the outcome variable (for a cross-sectional model) or a list of such vectors (for modeling the outcome at multiple time steps) or a data frame with one time step per column (also for longitudinal models of behavior). The right-hand side of the formula consists of tnam-specific model terms like \code{netlag}, \code{structsim} and other terms which are described on the help page of \link{tnam-terms}. }
@@ -19,7 +23,7 @@ The \code{tnam} function serves to estimate temporal or cross-sectional network 
 \item{time.linear}{ If multiple time steps are present: should a linear effect for time be added to the model? This can be estimated in the standard GLM framework. }
 \item{time.quadratic}{ If multiple time steps are present: should a squared effect for time be added to the model? This can be estimated in the standard GLM framework. }
 \item{center.y}{ Center the dependent variable by subtracting the mean from the actual value within each time step? }
-\item{na.action}{ How should missings value be treated? By default, they are omitted. See the \code{\link{na.omit}} help page for details. }
+\item{na.action}{ How should missing values be treated? By default, they are omitted. See the \code{\link{na.omit}} help page for details. }
 \item{...}{ Further arguments that should be passed to the \code{\link{glm}}, \code{\link{lmer}}, or \code{\link{glmer}} function, which is used under the hood for estimating the model. }
 }
 \examples{

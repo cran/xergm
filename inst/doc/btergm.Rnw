@@ -1,6 +1,10 @@
 %\VignetteIndexEntry{Estimating Temporal Exponential Random Graph Models by Bootstrapped Pseudolikelihood}
 %\VignetteDepends{}
-%\VignetteKeyword{network, bootstrapping, ERGM, TERGM, sna}
+%\VignetteKeyword{network}
+%\VignetteKeyword{bootstrapping}
+%\VignetteKeyword{ERGM}
+%\VignetteKeyword{TERGM}
+%\VignetteKeyword{sna}
 %\VignettePackage{xergm}
 
 \documentclass[12pt]{article}
@@ -38,14 +42,14 @@
 \newcommand{\proglang}[1]{\textbf{#1}}
 \newcommand{\code}[1]{\texttt{#1}}
 
-\title{Estimating Temporal Exponential Random Graph Models by Bootstrapped Pseudolikelihood\\ \bigskip \Large \texttt{R} package vignette for \pkg{xergm} 1.2}
+\title{Estimating Temporal Exponential Random Graph Models by Bootstrapped Pseudolikelihood\\ \bigskip \Large \texttt{R} package vignette for \pkg{xergm} 1.4}
 
 \author[$\ast$]{Philip Leifeld}
 \author[$\dag$]{Skyler J.\ Cranmer}
 \author[$\ddagger$]{Bruce A.\ Desmarais}
 
 \affil[$\ast$]{University of Konstanz}
-\affil[$\dag$]{University of North Carolina, Chapel Hill}
+\affil[$\dag$]{The Ohio State University}
 \affil[$\ddagger$]{University of Massachusetts, Amherst}
 
 
@@ -90,7 +94,7 @@ data("knecht")
 
 \begin{figure}[t!]
   \begin{center}
-    \includegraphics[width=0.68\textwidth]{nw}
+    \includegraphics[width=0.68\textwidth]{btergm-nw}
   \end{center}
   \caption{The four networks in the Knecht dataset.}
   \label{fig:nw}
@@ -298,7 +302,7 @@ Interpretation of these plots is straightforward; the model is said to fit bette
 
 \begin{figure}[!t]
   \begin{center}
-    \includegraphics[width=0.9\textwidth]{boxplots1}
+    \includegraphics[width=0.9\textwidth]{btergm-boxplots1}
   \end{center}
   \caption{Goodness-of-fit assessment using \code{statnet}-style boxplots.}
   \label{fig:boxplots1}
@@ -473,7 +477,7 @@ edgecov.mem[[i]]                              0.78 *
 
 \begin{figure}[!t]
   \begin{center}
-    \includegraphics[width=0.7\textwidth]{coefs}
+    \includegraphics[width=0.7\textwidth]{btergm-coefs}
   \end{center}
   \caption{Estimates and confidence intervals of the TERGM with temporal dynamics.}
   \label{fig:coef}
@@ -494,7 +498,7 @@ plotreg(model2, custom.model.names = "Model 2", custom.coef.names =
 
 \begin{figure}[!t]
   \begin{center}
-    \includegraphics[width=0.9\textwidth]{boxplots2}
+    \includegraphics[width=0.9\textwidth]{btergm-boxplots2}
   \end{center}
   \caption{Goodness-of-fit assessment of the second TERGM.}
   \label{fig:boxplots2}
@@ -557,7 +561,7 @@ we can display boxplot diagrams as above (results not reported here), we can pri
 
 \begin{figure}[!t]
   \begin{center}
-    \includegraphics[width=0.6\textwidth]{rocpr}
+    \includegraphics[width=0.6\textwidth]{btergm-rocpr}
   \end{center}
   \caption{Out-of-sample predictive fit of model~3 versus a null model.}
   \label{fig:rocpr}

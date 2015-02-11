@@ -1,23 +1,27 @@
 Package: xergm
-Version: 1.3
-Date: 2014-11-01
-Title: Extensions for Exponential Random Graph Models (ERGM)
-Authors@R: c(person(given = "Philip", family = "Leifeld", email = "philip.leifeld@uni-konstanz.de", role = c("aut", "cre")), person(given = c("Skyler", "J."), family = "Cranmer", email = "skyler@unc.edu", role = "aut"), person(given = c("Bruce", "A."), family = "Desmarais", email = "desmarais@polsci.umass.edu", role = "aut"))
-Description: Temporal exponential random graph models (TERGM) by bootstrapped pseudolikelihood ("btergm") and MCMC MLE ("mtergm") and (temporal) network autocorrelation models ("tnam").
-Depends: R (>= 2.14.0), ergm
+Version: 1.4.1
+Date: 2015-02-10
+Title: Extensions of Exponential Random Graph Models
+Authors@R: c(person(given = "Philip", family = "Leifeld", email = "philip.leifeld@uni-konstanz.de", role = c("aut", "cre")), 
+             person(given = c("Skyler", "J."), family = "Cranmer", email = "cranmer.12@osu.edu", role = "aut"), 
+             person(given = c("Bruce", "A."), family = "Desmarais", email = "desmarais@polsci.umass.edu", role = "aut"))
+Description: Extensions of Exponential Random Graph Models (ERGM): Temporal Exponential Random Graph Models (TERGM), Generalized Exponential Random Graph Models (GERGM), and Temporal Network Autocorrelation Models (TNAM).
+Depends: R (>= 2.14.0)
 Imports: stats4, utils, methods, statnet, statnet.common, network, sna,
-        texreg (>= 1.33), Matrix, parallel, boot, coda, stats, ROCR,
-        igraph, vegan, lme4 (>= 1.0)
+        ergm (>= 3.2.4), texreg (>= 1.34), Matrix, parallel, boot,
+        coda, stats, ROCR, igraph, vegan, lme4 (>= 1.0), Rcpp (>=
+        0.11.0), speedglm
 Suggests: RSiena (>= 1.0.12.169)
 License: GPL (>= 2)
+LinkingTo: Rcpp
 Author: Philip Leifeld [aut, cre],
   Skyler J. Cranmer [aut],
   Bruce A. Desmarais [aut]
 Maintainer: Philip Leifeld <philip.leifeld@uni-konstanz.de>
 Repository: CRAN
 Repository/R-Forge/Project: xergm
-Repository/R-Forge/Revision: 72
-Repository/R-Forge/DateTimeStamp: 2014-11-01 00:51:22
-Date/Publication: 2014-11-01 23:51:42
-Packaged: 2014-11-01 01:07:08 UTC; rforge
-NeedsCompilation: no
+Repository/R-Forge/Revision: 106
+Repository/R-Forge/DateTimeStamp: 2015-02-10 13:23:33
+Date/Publication: 2015-02-11 01:28:15
+Packaged: 2015-02-10 13:45:44 UTC; rforge
+NeedsCompilation: yes
