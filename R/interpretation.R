@@ -313,3 +313,96 @@ setMethod("interpret", signature = className("ergm", "ergm"),
 setMethod("interpret", signature = className("btergm", "btergm"), 
     definition = interpret.btergm)
 
+
+# function which preprocesses the right-hand side (rhs) of the formula
+# (may be obsolete in the near future when the tergmprepare function is used)
+preprocessrhs <- function(rhs, time.steps, iterator = "i", dep = NULL) {
+  
+  covnames <- character()
+  
+  # split up rhs terms
+  rhs.terms <- strsplit(rhs, "\\s*(\\+|\\*)\\s*")[[1]]
+  rhs.indices <- gregexpr("\\+|\\*", rhs)[[1]]
+  if (length(rhs.indices) == 1 && rhs.indices < 0) {
+    rhs.operators <- character()
+  } else {
+    rhs.operators <- substring(rhs, rhs.indices, rhs.indices)
+  }
+  
+  # preprocess dyadcov and edgecov terms
+  for (k in 1:length(rhs.terms)) {
+    if (grepl("((edge)|(dyad))cov", rhs.terms[k])) {
+      if (grepl(",\\s*?((attr)|\\\")", rhs.terms[k])) { # with attrib argument
+        x1 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)", "\\1", 
+            rhs.terms[k], perl = TRUE)
+        x2 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)", "\\5", 
+            rhs.terms[k], perl = TRUE)
+        x3 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,\\s*a*.*?)\\)(?:\\))?)", "\\6", 
+            rhs.terms[k], perl = TRUE)
+      } else { # without attribute argument
+        x1 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)", "\\1", 
+            rhs.terms[k], perl = TRUE)
+        x2 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)", "\\5", 
+            rhs.terms[k], perl = TRUE)
+        x3 <- sub("((?:offset\\()?((edge)|(dyad))cov\\()([^\\)]+)((,*\\s*a*.*?)\\)(?:\\))?)", "\\6", 
+            rhs.terms[k], perl = TRUE)
+      }
+      type <- class(eval(parse(text = x2)))
+      covnames <- c(covnames, x2)
+      
+      if (grepl("[^\\]]\\]$", x2)) {
+        # time-varying covariate with given indices (e.g., formula[1:5])
+        rhs.terms[k] <- paste(x1, x2, x3, sep = "")
+        if (length(eval(parse(text = x2))) != time.steps) {
+          stop(paste(x2, "has", length(eval(parse(text = x2))), 
+              "elements, but there are", time.steps, "networks to be modeled."))
+        }
+        
+      } else if (type == "matrix" || type == "network") {
+        # time-independent covariate
+        rhs.terms[k] <- paste(x1, x2, x3, sep = "")
+      } else if (type == "list" || type == "network.list") {
+        # time-varying covariate
+        if (length(eval(parse(text = x2))) != time.steps) {
+          stop(paste(x2, "has", length(get(x2)), "elements, but there are", 
+              time.steps, "networks to be modeled."))
+        }
+        x2 <- paste(x2, "[[", iterator, "]]", sep = "")
+        rhs.terms[k] <- paste(x1, x2, x3, sep = "")
+      } else {
+        stop(paste(x2, "is not a matrix, network, or list."))
+      }
+      
+      # check if dimensions at each time step are OK
+      if (!is.null(dep)) {
+        for (i in 1:length(dep)) {
+          cv <- eval(parse(text = x2))
+          msg <- paste0("btergm error: The dimensions of covariate '", x2, 
+              "' do not match the dimensions of the dependent network ", 
+              "at time step ", i, ".")
+          if ("list" %in% class(cv)) {
+            if (any(dim(as.matrix(dep[[i]])) != dim(as.matrix(cv[[i]])))) {
+              stop(msg)
+            }
+          } else {
+            if (any(dim(as.matrix(dep[[i]])) != dim(as.matrix(cv)))) {
+              stop(msg)
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  assign("covnames", covnames, envir = parent.frame(n = 1))
+  
+  # reassemble rhs
+  rhs <- rhs.terms[1]
+  if (length(rhs.operators) > 0) {
+    for (i in 1:length(rhs.operators)) {
+      rhs <- paste(rhs, rhs.operators[i], rhs.terms[i + 1])
+    }
+  }
+  return(rhs)
+}
+

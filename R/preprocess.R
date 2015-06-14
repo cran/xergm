@@ -1,8 +1,8 @@
 
 # how many NAs are there per row or column?
 numMissing <- function(mat, type = "both") {
-  numrow <- apply(mat, 1, function(x) sum(is.na(x)))
-  numcol <- apply(mat, 2, function(x) sum(is.na(x)))
+  numrow <- apply(as.matrix(mat), 1, function(x) sum(is.na(x)))
+  numcol <- apply(as.matrix(mat), 2, function(x) sum(is.na(x)))
   if (type == "both") {
     return(numrow + numcol)
   } else if (type == "row") {
@@ -36,14 +36,13 @@ is.mat.directed <- function(mat) {
       && any(rownames(mat) != colnames(mat))) {
     return(FALSE)
   } else {
-    if (any(!is.na(mat) && mat != t(mat))) {
+    if (any(mat != t(mat))) {
       return(TRUE)
     } else {
       return(FALSE)
     }
   }
 }
-
 
 
 # process NA values (= remove nodes with NAs iteratively)
@@ -319,7 +318,8 @@ handleMissings <- function(mat, na = NA, method = "remove", logical = FALSE) {
 
 
 # adjust the dimensions of a source object to the dimensions of a target object
-adjust <- function(source, target, remove = TRUE, add = TRUE) {
+adjust <- function(source, target, remove = TRUE, add = TRUE, value = NA, 
+    returnlabels = FALSE) {
   
   # make sure the source is a list
   if (is.null(source)) {
@@ -334,20 +334,18 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
     sources <- list()
     sources[[1]] <- source
     sources.initialtype <- "network"
-  } else if (class(source) == "data.frame") {
-    # wrap in list
-    sources <- list()
-    sources[[1]] <- source
-    sources.initialtype <- "data.frame"
   } else if (class(source) == "list") {
     # rename
     sources <- source
     sources.initialtype <- "list"
-  } else {
+  } else if (is.vector(source)) {
     # vector of some type; wrap in list
     sources <- list()
     sources[[1]] <- source
     sources.initialtype <- "vector"
+  } else {
+    stop(paste("Source data type not supported. Supported types are 'matrix',", 
+        "'network', and 'list' objects and vectors."))
   }
   
   # make sure the target is a list
@@ -363,20 +361,18 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
     targets <- list()
     targets[[1]] <- target
     targets.initialtype <- "network"
-  } else if (class(target) == "data.frame") {
-    # wrap in list
-    targets <- list()
-    targets[[1]] <- target
-    targets.initialtype <- "data.frame"
   } else if (class(target) == "list") {
     # rename
     targets <- target
     targets.initialtype <- "list"
-  } else {
+  } else if (is.vector(target)) {
     # vector of some type; wrap in list
     targets <- list()
     targets[[1]] <- target
     targets.initialtype <- "vector"
+  } else {
+    stop(paste("Target data type not supported. Supported types are 'matrix',", 
+        "'network', and 'list' objects and vectors."))
   }
   
   # make sure that both lists (sources and targets) have the same length
@@ -422,9 +418,6 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
     } else if (class(sources[[i]]) == "matrix") {
       sources.onemode[[i]] <- is.mat.onemode(sources[[i]])
       sources.directed[[i]] <- is.mat.directed(sources[[i]])
-    } else if (class(sources[[i]]) == "data.frame") {
-      sources.onemode[[i]] <- FALSE
-      sources.directed[[i]] <- TRUE
     } else {
       sources[[i]] <- as.matrix(sources[[i]], ncol = 1)
     }
@@ -445,9 +438,6 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
     } else if (class(targets[[i]]) == "matrix") {
       targets.onemode[[i]] <- is.mat.onemode(targets[[i]])
       targets.directed[[i]] <- is.mat.directed(targets[[i]])
-    } else if (class(targets[[i]]) == "data.frame") {
-      targets.onemode[[i]] <- FALSE
-      targets.directed[[i]] <- TRUE
     } else {
       targets[[i]] <- as.matrix(targets[[i]], ncol = 1)
     }
@@ -455,42 +445,65 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
   
   # go through sources and targets and do the actual adjustment
   for (i in 1:length(sources)) {
-    source.row.labels <- rownames(sources[[i]])
-    if (is.null(source.row.labels)) {
-      stop(paste0("The source at t = ", i, 
-          " does not contain any row labels."))
+    if (!is.vector(sources[[i]]) && !class(sources[[i]]) %in% c("matrix", 
+        "network")) {
+      stop(paste("Source item", i, "is not a matrix, network, or vector."))
     }
-    source.col.labels <- colnames(sources[[i]])
-    if (is.null(source.col.labels) && sources.types[[i]] %in% c("matrix", 
-        "data.frame", "network")) {
-      stop(paste0("The source at t = ", i, 
-          " does not contain any column labels."))
-    }
-    target.row.labels <- rownames(targets[[i]])
-    if (is.null(target.row.labels)) {
-      stop(paste0("The target at t = ", i, 
-          " does not contain any row labels."))
-    }
-    target.col.labels <- colnames(targets[[i]])
-    if (is.null(target.col.labels) && sources.types[[i]] %in% c("matrix", 
-        "data.frame", "network") && targets.types[[i]] %in% c("matrix", 
-        "data.frame", "network")) {
-      stop(paste0("The target at t = ", i, 
-          " does not contain any column labels."))
+    if (!is.vector(targets[[i]]) && !class(targets[[i]]) %in% c("matrix", 
+        "network")) {
+      stop(paste("Target item", i, "is not a matrix, network, or vector."))
     }
     
-    # do the adjustment
-    add.row.indices <- which(!target.row.labels %in% source.row.labels)
-    add.row.labels <- target.row.labels[add.row.indices]
-    add.col.indices <- which(!target.col.labels %in% source.col.labels)
-    add.col.labels <- target.col.labels[add.col.indices]
-    nr <- nrow(sources[[i]])  # save for later use
+    # add
+    add.row.labels <- character()
+    add.col.labels <- character()
     if (add == TRUE) {
+      # compile source and target row and column labels
+      nr <- nrow(sources[[i]])  # save for later use
+      source.row.labels <- rownames(sources[[i]])
+      if (!sources.types[[i]] %in% c("matrix", "network")) {
+        source.col.labels <- rownames(sources[[i]])
+      } else {
+        source.col.labels <- colnames(sources[[i]])
+      }
+      if (sources.types[[i]] %in% c("matrix", "network")) {
+        if (is.null(source.row.labels)) {
+          stop(paste0("The source at t = ", i, 
+              " does not contain any row labels."))
+        }
+        if (is.null(source.col.labels)) {
+          stop(paste0("The source at t = ", i, 
+              " does not contain any column labels."))
+        }
+      }
+      
+      target.row.labels <- rownames(targets[[i]])
+      if (!targets.types[[i]] %in% c("matrix", "network")) {
+        target.col.labels <- rownames(targets[[i]])
+      } else {
+        target.col.labels <- colnames(targets[[i]])
+      }
+      if (is.null(target.row.labels)) {
+        stop(paste0("The target at t = ", i, 
+            " does not contain any row labels."))
+      }
+      if (targets.types[[i]] %in% c("matrix", "network")) {
+        if (is.null(target.col.labels)) {
+          stop(paste0("The target at t = ", i, 
+              " does not contain any column labels."))
+        }
+      }
+      
+      add.row.indices <- which(!target.row.labels %in% source.row.labels)
+      add.row.labels <- target.row.labels[add.row.indices]
+      add.col.indices <- which(!target.col.labels %in% source.col.labels)
+      add.col.labels <- target.col.labels[add.col.indices]
+      
       # adjust rows
       if (length(add.row.indices) > 0) {
         for (j in 1:length(add.row.indices)) {
-          insert <- rep(NA, ncol(sources[[i]]))
-          part1 <- sources[[i]][1:(add.row.indices[j] - 1), ]
+          insert <- rep(value, ncol(sources[[i]]))
+          part1 <- sources[[i]][0:(add.row.indices[j] - 1), ]
           if (class(part1) != "matrix") {
             if (sources.types[[i]] == "matrix") {
               part1 <- matrix(part1, nrow = 1)
@@ -498,14 +511,14 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
               part1 <- matrix(part1, ncol = 1)
             }
           }
-          rownames(part1) <- rownames(sources[[i]])[1:(add.row.indices[j] - 1)]
+          rownames(part1) <- rownames(sources[[i]])[0:(add.row.indices[j] - 1)]
           if (add.row.indices[j] <= nrow(sources[[i]])) {
             part2 <- sources[[i]][add.row.indices[j]:nrow(sources[[i]]), ]
           } else {
             part2 <- matrix(ncol = ncol(sources[[i]]), nrow = 0)
           }
           if (class(part2) != "matrix") {
-            part2 <- matrix(part2, ncol = 1)
+            part2 <- matrix(part2, nrow = 1)
           }
           if (nrow(part2) > 0) {
             rownames(part2) <- rownames(sources[[i]])[add.row.indices[j]:
@@ -515,17 +528,19 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
             sources[[i]] <- rbind(part1, insert)
           }
           rownames(sources[[i]])[add.row.indices[j]] <- add.row.labels[j]
+          
           # adjust nodal attributes (in the one-mode case)
           if (sources.types[[i]] == "network" && sources.onemode[[i]] == TRUE) {
             for (k in 1:length(sources.attributes[[i]])) {
-              at1 <- sources.attributes[[i]][[k]][1:(add.row.indices[j] - 1)]
+              at1 <- sources.attributes[[i]][[k]][0:(add.row.indices[j] - 1)]
               at2 <- sources.attributes[[i]][[k]][add.row.indices[j]:length(
                   sources.attributes[[i]][[k]])]
               if (sources.attribnames[[i]][k] == "vertex.names") {
-                sources.attributes[[i]][[k]] <- c(at1, 
-                    targets.attributes[[i]][[k]][add.row.indices], at2)
+                sources.attributes[[i]][[k]] <- c(at1, add.row.labels[j], at2)
+              } else if (sources.attribnames[[i]][k] == "na") {
+                sources.attributes[[i]][[k]] <- c(at1, TRUE, at2)
               } else {
-                sources.attributes[[i]][[k]] <- c(at1, NA, at2)
+                sources.attributes[[i]][[k]] <- c(at1, value, at2)
               }
             }
           }
@@ -534,14 +549,14 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
       
       # adjust columns
       if (length(add.col.indices) > 0 && sources.types[[i]] %in% c("matrix", 
-          "data.frame", "network")) {
+          "network")) {
         for (j in 1:length(add.col.indices)) {
-          insert <- rep(NA, nrow(sources[[i]]))
-          part1 <- sources[[i]][, 1:(add.col.indices[j] - 1)]
+          insert <- rep(value, nrow(sources[[i]]))
+          part1 <- sources[[i]][, 0:(add.col.indices[j] - 1)]
           if (class(part1) != "matrix") {
             part1 <- matrix(part1, ncol = 1)
           }
-          colnames(part1) <- colnames(sources[[i]])[1:(add.col.indices[j] - 1)]
+          colnames(part1) <- colnames(sources[[i]])[0:(add.col.indices[j] - 1)]
           if (add.col.indices[j] <= ncol(sources[[i]])) {
             part2 <- sources[[i]][, add.col.indices[j]:ncol(sources[[i]])]
           } else {  # if last column, add empty column as second part
@@ -550,40 +565,89 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
           if (class(part2) != "matrix") {
             part2 <- matrix(part2, ncol = 1)
           }
-          colnames(part2) <- colnames(sources[[i]])[add.col.indices[j]:
-              ncol(sources[[i]])]
-          sources[[i]] <- cbind(part1, insert, part2)
+          if (ncol(part2) > 0) {
+            colnames(part2) <- colnames(sources[[i]])[add.col.indices[j]:
+                ncol(sources[[i]])]
+            sources[[i]] <- cbind(part1, insert, part2)
+          } else {
+            sources[[i]] <- cbind(part1, insert)
+          }
           colnames(sources[[i]])[add.col.indices[j]] <- add.col.labels[j]
         }
       }
+      
       # adjust nodal attributes for two-mode networks
       if (sources.types[[i]] == "network" && sources.onemode[[i]] == FALSE) {
         add.col.indices <- sapply(add.col.indices, function(x) x + nr)
         combined.indices <- c(add.row.indices, add.col.indices)
         for (j in 1:length(sources.attributes[[i]])) {
           for (k in 1:length(combined.indices)) {
-            at1 <- sources.attributes[[i]][[j]][1:(combined.indices[k] - 1)]
+            at1 <- sources.attributes[[i]][[j]][0:(combined.indices[k] - 1)]
             at2 <- sources.attributes[[i]][[j]][combined.indices[k]:length(
                 sources.attributes[[i]][[j]])]
-            if (sources.attribnames[[i]][k] == "vertex.names") {
-              sources.attributes[[i]][[j]] <- c(at1, 
-                  targets.attributes[[i]][[j]][combined.indices], at2)
+            if (sources.attribnames[[i]][j] == "vertex.names") {
+              sources.attributes[[i]][[j]] <- c(at1, add.col.labels[j], at2)
+            } else if (sources.attribnames[[i]][j] == "na") {
+              sources.attributes[[i]][[j]] <- c(at1, TRUE, at2)
             } else {
-              sources.attributes[[i]][[j]] <- c(at1, NA, at2)
+              sources.attributes[[i]][[j]] <- c(at1, value, at2)
             }
           }
         }
       }
     }
     
+    removed.rows <- character()
+    removed.columns <- character()
     if (remove == TRUE) {
+      # compile source and target row and column labels
+      nr <- nrow(sources[[i]])  # save for later use
+      source.row.labels <- rownames(sources[[i]])
+      if (!sources.types[[i]] %in% c("matrix", "network")) {
+        source.col.labels <- rownames(sources[[i]])
+      } else {
+        source.col.labels <- colnames(sources[[i]])
+      }
+      if (sources.types[[i]] %in% c("matrix", "network")) {
+        if (is.null(source.row.labels)) {
+          stop(paste0("The source at t = ", i, 
+              " does not contain any row labels."))
+        }
+        if (is.null(source.col.labels)) {
+          stop(paste0("The source at t = ", i, 
+              " does not contain any column labels."))
+        }
+      }
+      
+      target.row.labels <- rownames(targets[[i]])
+      if (!targets.types[[i]] %in% c("matrix", "network")) {
+        target.col.labels <- rownames(targets[[i]])
+      } else {
+        target.col.labels <- colnames(targets[[i]])
+      }
+      if (targets.types[[i]] %in% c("matrix", "network")) {
+        if (is.null(target.row.labels)) {
+          stop(paste0("The target at t = ", i, 
+              " does not contain any row labels."))
+        }
+        if (is.null(target.col.labels)) {
+          stop(paste0("The target at t = ", i, 
+              " does not contain any column labels."))
+        }
+      }
+      
+      # remove
+      source.row.labels <- rownames(sources[[i]])
+      source.col.labels <- colnames(sources[[i]])
+      target.row.labels <- rownames(targets[[i]])
+      target.col.labels <- colnames(targets[[i]])
       keep.row.indices <- which(source.row.labels %in% target.row.labels)
-      if (sources.types[[i]] %in% c("matrix", "data.frame", "network") && 
-          targets.types[[i]] %in% c("matrix", "data.frame", "network")) {
+      if (sources.types[[i]] %in% c("matrix", "network") && 
+          targets.types[[i]] %in% c("matrix", "network")) {
         keep.col.indices <- which(source.col.labels %in% target.col.labels)
-      } else if (sources.types[[i]] %in% c("matrix", "data.frame", "network") 
-          && !targets.types[[i]] %in% c("matrix", "data.frame", "network")) { 
-        # target is a vector -> keep all columns of source
+      } else if (sources.types[[i]] %in% c("matrix", "network") 
+          && !targets.types[[i]] %in% c("matrix", "network")) { 
+        # target is a vector -> keep all columns of source if not onemode
         if (sources.onemode[[i]] == TRUE) {  # columns same as rows
           keep.col.indices <- keep.row.indices
         } else {
@@ -592,8 +656,13 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
       } else {
         keep.col.indices <- 1
       }
+      removed.rows <- which(!1:nrow(as.matrix(sources[[i]])) %in% 
+          keep.row.indices)
+      removed.columns <- which(!1:nrow(as.matrix(sources[[i]])) %in% 
+          keep.col.indices)
       
-      sources[[i]] <- sources[[i]][keep.row.indices, keep.col.indices]
+      sources[[i]] <- as.matrix(sources[[i]][keep.row.indices, 
+          keep.col.indices])
       if (sources.types[[i]] == "network") {
         if (sources.onemode[[i]] == TRUE) {
           for (j in 1:length(sources.attributes[[i]])) {
@@ -611,6 +680,39 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
       }
     }
     
+    # sort source (and attributes) according to row and column names of target
+    if (length(sources.attributes) > 0) {
+      for (j in 1:length(sources.attributes[[i]])) {
+        if (!is.null(sources.attributes[[i]][[j]]) && 
+          length(sources.attributes[[i]][[j]]) > 0) {
+          names(sources.attributes[[i]][[j]]) <- rownames(sources[[i]])
+          sources.attributes[[i]][[j]] <- 
+              sources.attributes[[i]][[j]][rownames(sources[[i]])]
+        }
+      }
+    }
+    
+    if (sources.types[[i]] %in% c("matrix", "network") && 
+        targets.types[[i]] %in% c("matrix", "network") && 
+        nrow(sources[[i]]) == nrow(targets[[i]]) && 
+        ncol(sources[[i]]) == ncol(targets[[i]])) {
+      sources[[i]] <- sources[[i]][rownames(targets[[i]]), 
+          colnames(targets[[i]])]
+    } else if (sources.types[[i]] %in% c("matrix", "network") && 
+        !targets.types[[i]] %in% c("matrix", "network") && 
+        nrow(sources[[i]]) == nrow(targets[[i]])) {
+      sources[[i]] <- sources[[i]][rownames(targets[[i]]), 
+          rownames(targets[[i]])]
+    } else if (length(sources[[i]]) == nrow(targets[[i]])) {
+      # source is a vector, irrespective of the target
+      sources[[i]] <- sources[[i]][rownames(targets[[i]]), ]
+    } else if (add == FALSE && (nrow(sources[[i]]) < nrow(targets[[i]]) || 
+        any(rownames(sources[[i]]) != rownames(targets[[i]])))) {
+      #warning(paste("Resulting object(s) could not be sorted according to", 
+      #    "target because missing rows and/or columns were not added. Use", 
+      #    "argument 'add = TRUE' to prevent this."))
+    }
+    
     # convert back into network
     if (sources.types[[i]] == "network") {
       sources[[i]] <- network(sources[[i]], directed = sources.directed[[i]], 
@@ -619,15 +721,21 @@ adjust <- function(source, target, remove = TRUE, add = TRUE) {
         sources[[i]] <- set.vertex.attribute(sources[[i]], 
             sources.attribnames[[i]][j], sources.attributes[[i]][[j]])
       }
-    } else if (!sources.types[[i]] %in% c("matrix", "data.frame") && 
-        length(sources[[i]]) == 1) {
-      sources[[i]] <- sources[[i]][, 1]
     }
     
     # convert vectors back from one-column matrices to vectors
-    if (!sources.types %in% c("matrix", "network", "data.frame") && 
+    if (!sources.types[[i]] %in% c("matrix", "network") && 
         class(sources[[i]]) == "matrix" && ncol(sources[[i]]) == 1) {
       sources[[i]] <- sources[[i]][, 1]
+    }
+    
+    # return added and removed labels instead of actual objects
+    if (returnlabels == TRUE) {
+      sources[[i]] <- list()
+      sources[[i]]$removed.row <- removed.rows
+      sources[[i]]$removed.col <- removed.columns
+      sources[[i]]$added.row <- add.row.labels
+      sources[[i]]$added.col <- add.col.labels
     }
   }
   
@@ -692,12 +800,12 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
         if (nrow(as.matrix(l[[i]][[j]])) > largest.nr && 
             !is.null(rownames(as.matrix(l[[i]][[j]])))) {
           largest.nr <- nrow(as.matrix(l[[i]][[j]]))
-          largest.row.labels <- rownames(l[[i]][[j]])
+          largest.row.labels <- rownames(as.matrix(l[[i]][[j]]))
         }
         if (ncol(as.matrix(l[[i]][[j]])) > largest.nc && 
             !is.null(colnames(as.matrix(l[[i]][[j]])))) {
-          largest.nc <- ncol(l[[i]][[j]])
-          largest.col.labels <- colnames(l[[i]][[j]])
+          largest.nc <- ncol(as.matrix(l[[i]][[j]]))
+          largest.col.labels <- colnames(as.matrix(l[[i]][[j]]))
         }
       } else if (class(l[[i]][[j]]) == "data.frame") {
         if (nrow((l[[i]][[j]]) > largest.nr && 
@@ -817,7 +925,8 @@ preprocess <- function(object, ..., lag = FALSE, covariate = FALSE,
   # create memory term
   if (memory[1] == "no") {
     # no memory term
-  } else if (memory[1] %in% c("stability", "autoregression", "innovation")) {
+  } else if (memory[1] %in% c("stability", "autoregression", "innovation", 
+      "loss")) {
     if (lag == FALSE || covariate == FALSE) {
       stop(paste("Memory terms can only be created in conjunction with", 
           "'lag = TRUE' and 'covariate = TRUE'."))
@@ -908,6 +1017,10 @@ timecov <- function(covariate, minimum = 1, maximum = length(covariate),
       timecov[[i]] <- matrix(values[i], nrow = nrow(covariate[[i]]), 
           ncol = ncol(covariate[[i]]))
     }
+  }
+  for (i in 1:length(timecov)) {
+    rownames(timecov[[i]]) <- rownames(covariate[[i]])
+    colnames(timecov[[i]]) <- colnames(covariate[[i]])
   }
   return(timecov)
 }

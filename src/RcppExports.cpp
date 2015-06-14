@@ -6,7 +6,7 @@
 using namespace Rcpp;
 
 // netLagCppLoop
-NumericVector netLagCppLoop(IntegerMatrix mat, IntegerMatrix pdistmat, IntegerVector pathdist, IntegerVector decay, NumericVector y, std::string normalization, bool reciprocal);
+NumericVector netLagCppLoop(IntegerMatrix mat, IntegerMatrix pdistmat, IntegerVector pathdist, NumericVector decay, NumericVector y, std::string normalization, bool reciprocal);
 RcppExport SEXP xergm_netLagCppLoop(SEXP matSEXP, SEXP pdistmatSEXP, SEXP pathdistSEXP, SEXP decaySEXP, SEXP ySEXP, SEXP normalizationSEXP, SEXP reciprocalSEXP) {
 BEGIN_RCPP
     SEXP __sexp_result;
@@ -15,7 +15,7 @@ BEGIN_RCPP
         Rcpp::traits::input_parameter< IntegerMatrix >::type mat(matSEXP );
         Rcpp::traits::input_parameter< IntegerMatrix >::type pdistmat(pdistmatSEXP );
         Rcpp::traits::input_parameter< IntegerVector >::type pathdist(pathdistSEXP );
-        Rcpp::traits::input_parameter< IntegerVector >::type decay(decaySEXP );
+        Rcpp::traits::input_parameter< NumericVector >::type decay(decaySEXP );
         Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP );
         Rcpp::traits::input_parameter< std::string >::type normalization(normalizationSEXP );
         Rcpp::traits::input_parameter< bool >::type reciprocal(reciprocalSEXP );

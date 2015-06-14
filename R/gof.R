@@ -1,7 +1,7 @@
 
 # function which reduces a statistic x nsim matrix and computes summary stats
 # input: two matrices of a certain type of statistics (simulated and observed)
-# goal: get rid of empty rows at the end, e.g. where dsp(37) or so is usually
+# goal: get rid of empty rows at the end, e.g., where dsp(37) or so is usually
 # not observed; return value: object containing the summary statistics
 reduce.matrix <- function(sim, obs) {
   
@@ -9,7 +9,7 @@ reduce.matrix <- function(sim, obs) {
   numobs <- ncol(as.matrix(obs))
   
   # if geodist statistic: put aside the last 'Inf' row
-  if (rownames(sim)[nrow(sim)] == "Inf") {
+  if (is.null(rownames(sim)) || rownames(sim)[nrow(sim)] == "Inf") {
     geo <- TRUE
     inf.sim <- sim[nrow(sim), ]  # put aside this row for now and reuse later
     sim <- sim[-nrow(sim), ]
@@ -108,7 +108,16 @@ reduce.matrix <- function(sim, obs) {
     x.median <- apply(sim, 1, median)
     x.pval <- numeric()
     for (i in 1:nrow(sim)) {
-      x.pval[i] <- t.test(obs[i, ], sim[i, ])$p.value  # compare group means
+      tryCatch(
+        expr = {
+          x.pval[i] <- t.test(obs[i, ], sim[i, ])$p.value  # compare group means
+        }, 
+        error = function(e) {
+          x.pval[i] <- 1  # if both are 0, a t.test cannot be computed...
+        }, 
+        finally = {}
+      )
+      
       if (is.nan(x.pval[i])) {  # geodist contains "Inf"
         x.pval[i] <- 1
       }
@@ -130,9 +139,9 @@ reduce.matrix <- function(sim, obs) {
 
 
 # classic statnet-like GOF function
-statnetgof <- function(gofobject, simulations, target, dsp = TRUE, 
-    esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, 
-    odegree = TRUE, kstar = TRUE, istar = TRUE, ostar = TRUE, ...) {
+statnetgof <- function(gofobject, simulations, target, statistics = c("dsp", 
+    "esp", "geodist", "degree", "idegree", "odegree", "kstar", "istar", 
+    "ostar"), ...) {
   
   message("\nComputing classic (statnet-style) goodness of fit:")
   directed <- simulations[[1]]$gal$directed
@@ -142,175 +151,102 @@ statnetgof <- function(gofobject, simulations, target, dsp = TRUE,
   stats <- list()
   raw <- list()
   
-  # dyad-wise shared partners
-  message("[1/9] Comparison for dyad-wise shared partners...")
-  if (dsp == TRUE) {
-    dsp.max <- gofobject$num.vertices
-    dsp.sim <- sapply(simulations, function(x) summary(x ~ dsp(0:dsp.max)))
-    dsp.obs <- sapply(target, function(x) summary(x ~ dsp(0:dsp.max)))
-    dsp.reduced <- reduce.matrix(dsp.sim, dsp.obs)
-    stats <- c(stats, dsp = list(dsp.reduced$comparison))
-    raw <- c(raw, dsp = list(Matrix(as.matrix(dsp.reduced$sim))))
-  } else {
-    message(" -> Ignoring dyad-wise shared partners because 'dsp = FALSE'.")
-  }
-  
-  # edge-wise shared partners
-  message("[2/9] Comparison for edge-wise shared partners...")
-  if (esp == TRUE) {
-    if (bipartite == FALSE) {
-      esp.max <- gofobject$num.vertices
-      esp.sim <- sapply(simulations, function(x) summary(x ~ esp(0:esp.max)))
-      esp.obs <- sapply(target, function(x) summary(x ~ esp(0:esp.max)))
-      esp.reduced <- reduce.matrix(esp.sim, esp.obs)
-      stats <- c(stats, esp = list(esp.reduced$comparison))
-      raw <- c(raw, esp = list(Matrix(as.matrix(esp.reduced$sim))))
-    } else {
-      message(" -> Bipartite networks. Ignoring the 'esp' statistic.")
-    }
-  } else {
-    message(" -> Ignoring edge-wise shared partners because 'esp = FALSE'.")
-  }
-  
-  # geodesic distance
-  message("[3/9] Comparison for geodesic distances...")
-  if (geodist == TRUE) {
-    fillup <- function(x, another.length) {  # fill up x if shorter
-      difference <- length(x) - another.length
-      inf.value <- x[length(x)]
-      if (difference < 0) {  # x is shorter
-        x <- x[1:(length(x) - 1)]
-        x <- c(x, rep(0, abs(difference)), inf.value)
-      } else if (difference > 0) {
-        x <- x[1:(length(x) - difference)]
-        x <- c(x, inf.value)
+  num.stats <- length(statistics)
+  mx <- max(gofobject$num.vertices)  # maximum number of nodes
+  for (i in 1:num.stats) {
+    stat.i <- statistics[i]
+    sim <- NULL
+    obs <- NULL
+    if (stat.i == "dsp") {  # dsp
+      message(paste0("[", i, "/", num.stats, 
+          "] Comparison for dyad-wise shared partners..."))
+      sim <- sapply(simulations, function(x) summary(x ~ dsp(0:mx)))
+      obs <- sapply(target, function(x) summary(x ~ dsp(0:mx)))
+    } else if (stat.i == "esp") {  # esp
+      message(paste0("[", i, "/", num.stats, 
+          "] Comparison for edge-wise shared partners..."))
+      if (bipartite == FALSE) {
+        sim <- sapply(simulations, function(x) summary(x ~ esp(0:mx)))
+        obs <- sapply(target, function(x) summary(x ~ esp(0:mx)))
+      } else {
+        message(" -> Bipartite networks. Ignoring the 'esp' statistic.")
       }
-      return(x)
-    }
-    geodist.max <- gofobject$num.vertices
-    geod.sim <- sapply(simulations, function(x) fillup(ergm.geodistdist(x), 
-        geodist.max))
-    geod.obs <- sapply(target, function(x) fillup(ergm.geodistdist(x),
-        geodist.max))
-    geod.reduced <- reduce.matrix(geod.sim, geod.obs)
-    stats <- c(stats, geodist = list(geod.reduced$comparison))
-    raw <- c(raw, geodist = list(Matrix(as.matrix(geod.reduced$sim))))
-  } else {
-    message(" -> Ignoring geodesic distance because 'geodist = FALSE'.")
-  }
-  
-  # degree
-  message("[4/9] Comparison for degree...")
-  if (degree == TRUE) {
-    if (directed == TRUE) {
-      message(" -> Directed networks. Ignoring the 'degree' statistic.")
+    } else if (stat.i == "geodist") {  # geodist
+      message(paste0("[", i, "/", num.stats, 
+          "] Comparison for geodesic distances..."))
+      fillup <- function(x, another.length) {  # fill up x if shorter
+        difference <- length(x) - another.length
+        inf.value <- x[length(x)]
+        if (difference < 0) {  # x is shorter
+          x <- x[1:(length(x) - 1)]
+          x <- c(x, rep(0, abs(difference)), inf.value)
+        } else if (difference > 0) {
+          x <- x[1:(length(x) - difference)]
+          x <- c(x, inf.value)
+        }
+        return(x)
+      }
+      sim <- sapply(simulations, function(x) fillup(ergm.geodistdist(x), mx))
+      obs <- sapply(target, function(x) fillup(ergm.geodistdist(x), mx))
+    } else if (stat.i == "degree") {  # degree
+      message(paste0("[", i, "/", num.stats, "] Comparison for degree..."))
+      if (directed == TRUE) {
+        message(" -> Directed networks. Ignoring the 'degree' statistic.")
+      } else {
+        sim <- sapply(simulations, function(x) summary(x ~ degree(0:mx)))
+        obs <- sapply(target, function(x) summary(x ~ degree(0:mx)))
+      }
+    } else if (stat.i == "idegree") {  # idegree
+      message(paste0("[", i, "/", num.stats, "] Comparison for indegree..."))
+      if (directed == FALSE) {
+        message(" -> Undirected networks. Ignoring the 'idegree' statistic.")
+      } else {
+        sim <- sapply(simulations, function(x) summary(x ~ idegree(0:mx)))
+        obs <- sapply(target, function(x) summary(x ~ idegree(0:mx)))
+      }
+    } else if (stat.i == "odegree") {  # odegree
+      message(paste0("[", i, "/", num.stats, "] Comparison for outdegree..."))
+      if (directed == FALSE) {
+        message(" -> Undirected networks. Ignoring the 'odegree' statistic.")
+      } else {
+        sim <- sapply(simulations, function(x) summary(x ~ odegree(0:mx)))
+        obs <- sapply(target, function(x) summary(x ~ odegree(0:mx)))
+      }
+    } else if (stat.i == "kstar") {  # kstar
+      message(paste0("[", i, "/", num.stats, "] Comparison for k-stars..."))
+      if (directed == TRUE) {
+        message(" -> Directed networks. Ignoring the 'kstar' statistic.")
+      } else {
+        sim <- sapply(simulations, function(x) summary(x ~ kstar(1:mx)))
+        obs <- sapply(target, function(x) summary(x ~ kstar(1:mx)))
+      }
+    } else if (stat.i == "istar") {  # istar
+      message(paste0("[", i, "/", num.stats, "] Comparison for in-stars..."))
+      if (directed == FALSE) {
+        message(" -> Undirected networks. Ignoring the 'istar' statistic.")
+      } else {
+        sim <- sapply(simulations, function(x) summary(x ~ istar(0:mx)))
+        obs <- sapply(target, function(x) summary(x ~ istar(0:mx)))
+      }
+    } else if (stat.i == "ostar") {  # ostar
+      message(paste0("[", i, "/", num.stats, "] Comparison for out-stars..."))
+      if (directed == FALSE) {
+        message(" -> Undirected networks. Ignoring the 'ostar' statistic.")
+      } else {
+        sim <- sapply(simulations, function(x) summary(x ~ ostar(0:mx)))
+        obs <- sapply(target, function(x) summary(x ~ ostar(0:mx)))
+      }
     } else {
-      degree.max <- gofobject$num.vertices
-      degree.sim <- sapply(simulations, function(x) 
-          summary(x ~ degree(0:degree.max)))
-      degree.obs <- sapply(target, function(x) 
-          summary(x ~ degree(0:degree.max)))
-      degree.reduced <- reduce.matrix(degree.sim, degree.obs)
-      stats <- c(stats, degree = list(degree.reduced$comparison))
-      raw <- c(raw, degree = list(Matrix(as.matrix(degree.reduced$sim))))
+      message(paste0("[", i, "/", num.stats, "] ", stat.i, 
+          " not recognized. Skipping this statistic."))
     }
-  } else {
-    message(" -> Ignoring degree because 'degree = FALSE'.")
-  }
-  
-  # indegree
-  message("[5/9] Comparison for indegree...")
-  if (idegree == TRUE) {
-    if (directed == FALSE) {
-      message(" -> Undirected networks. Ignoring the 'idegree' statistic.")
-    } else {
-      idegree.max <- gofobject$num.vertices
-      idegree.sim <- sapply(simulations, function(x) 
-          summary(x ~ idegree(0:idegree.max)))
-      idegree.obs <- sapply(target, function(x) 
-          summary(x ~ idegree(0:idegree.max)))
-      idegree.reduced <- reduce.matrix(idegree.sim, idegree.obs)
-      stats <- c(stats, idegree = list(idegree.reduced$comparison))
-      raw <- c(raw, idegree = list(Matrix(as.matrix(idegree.reduced$sim))))
+    if (!is.null(sim) && !is.null(obs)) {
+      reduced <- reduce.matrix(sim, obs)
+      stats <- c(stats, list(reduced$comparison))
+      raw <- c(raw, list(Matrix(as.matrix(reduced$sim))))
+      names(stats)[length(stats)] <- stat.i
+      names(raw)[length(raw)] <- stat.i
     }
-  } else {
-    message(" -> Ignoring indegree because 'idegree = FALSE'.")
-  }
-  
-  # outdegree
-  message("[6/9] Comparison for outdegree...")
-  if (odegree == TRUE) {
-    if (directed == FALSE) {
-      message(" -> Undirected networks. Ignoring the 'odegree' statistic.")
-    } else {
-      odegree.max <- gofobject$num.vertices
-      odegree.sim <- sapply(simulations, function(x) 
-          summary(x ~ odegree(0:odegree.max)))
-      odegree.obs <- sapply(target, function(x) 
-          summary(x ~ odegree(0:odegree.max)))
-      odegree.reduced <- reduce.matrix(odegree.sim, odegree.obs)
-      stats <- c(stats, odegree = list(odegree.reduced$comparison))
-      raw <- c(raw, odegree = list(Matrix(as.matrix(odegree.reduced$sim))))
-    }
-  } else {
-    message(" -> Ignoring outdegree because 'odegree = FALSE'.")
-  }
-  
-  # kstar
-  message("[7/9] Comparison for k-stars...")
-  if (kstar == TRUE) {
-    if (directed == TRUE) {
-      message(" -> Directed networks. Ignoring the 'kstar' statistic.")
-    } else {
-      kstar.max <- gofobject$num.vertices
-      kstar.sim <- sapply(simulations, function(x) 
-          summary(x ~ kstar(1:kstar.max)))
-      kstar.obs <- sapply(target, function(x) 
-          summary(x ~ kstar(1:kstar.max)))
-      kstar.reduced <- reduce.matrix(kstar.sim, kstar.obs)
-      stats <- c(stats, kstar = list(kstar.reduced$comparison))
-      raw <- c(raw, kstar = list(Matrix(as.matrix(kstar.reduced$sim))))
-    }
-  } else {
-    message(" -> Ignoring k-stars because 'kstar = FALSE'.")
-  }
-  
-  # istar
-  message("[8/9] Comparison for in-stars...")
-  if (istar == TRUE) {
-    if (directed == FALSE) {
-      message(" -> Undirected networks. Ignoring the 'istar' statistic.")
-    } else {
-      istar.max <- gofobject$num.vertices
-      istar.sim <- sapply(simulations, function(x) 
-          summary(x ~ istar(0:istar.max)))
-      istar.obs <- sapply(target, function(x) 
-          summary(x ~ istar(0:istar.max)))
-      istar.reduced <- reduce.matrix(istar.sim, istar.obs)
-      stats <- c(stats, istar = list(istar.reduced$comparison))
-      raw <- c(raw, istar = list(Matrix(as.matrix(istar.reduced$sim))))
-    }
-  } else {
-    message(" -> Ignoring in-stars because 'istar = FALSE'.")
-  }
-  
-  # ostar
-  message("[9/9] Comparison for out-stars...")
-  if (ostar == TRUE) {
-    if (directed == FALSE) {
-      message(" -> Undirected networks. Ignoring the 'ostar' statistic.")
-    } else {
-      ostar.max <- gofobject$num.vertices
-      ostar.sim <- sapply(simulations, function(x) 
-          summary(x ~ ostar(0:ostar.max)))
-      ostar.obs <- sapply(target, function(x) 
-          summary(x ~ ostar(0:ostar.max)))
-      ostar.reduced <- reduce.matrix(ostar.sim, ostar.obs)
-      stats <- c(stats, ostar = list(ostar.reduced$comparison))
-      raw <- c(raw, ostar = list(Matrix(as.matrix(ostar.reduced$sim))))
-    }
-  } else {
-    message(" -> Ignoring in-stars because 'ostar = FALSE'.")
   }
   
   gofobject$raw <- raw
@@ -555,7 +491,7 @@ randomgraph <- function(networks, nsim = 100) {
   bip <- is.bipartite(networks[[1]])
   rownum <- sapply(networks, function(x) nrow(as.matrix(x)))
   colnum <- sapply(networks, function(x) ncol(as.matrix(x)))
-  dens <- sapply(networks, function(x) summary(x ~ density))
+  dens <- sapply(networks, sna::gden)
   rg <- list()
   for (i in 1:length(networks)) {
     rlist <- list()
@@ -581,9 +517,8 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
     nsim = 100, MCMC.interval = 1000, MCMC.burnin = 10000, 
     parallel = c("no", "MPI", "SOCK"), ncpus = 1, cl = NULL, 
     classicgof = TRUE, rocprgof = TRUE, checkdegeneracy = TRUE, 
-    dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, idegree = TRUE, 
-    odegree = TRUE, kstar = TRUE, istar = TRUE, ostar = TRUE, 
-    pr.impute = "poly4", verbose = TRUE, ...) {
+    statistics = c("dsp", "esp", "geodist", "degree", "idegree", "odegree", 
+    "kstar", "istar", "ostar"), pr.impute = "poly4", verbose = TRUE, ...) {
   
   if (nsim < 2) {
     stop("The 'nsim' argument must be greater than 1.")
@@ -596,41 +531,23 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
     degensim <- list()
   }
   
-  # extract response networks,  time steps, num.vertices, directed, bipartite
-  networks.0238207531 <- eval(parse(text = deparse(formula[[2]])))
-  if (class(networks.0238207531) == "network" || 
-      class(networks.0238207531) == "matrix") {
-    networks.0238207531 <- list(networks.0238207531)
-  }
-  time.steps <- length(networks.0238207531)
-  num.vertices <- max(sapply(networks.0238207531, 
-      function(object) get.network.attribute(network(object), "n")))
-  
-  if (is.network(networks.0238207531[[1]])) {
-    directed <- is.directed(networks.0238207531[[1]])
-    bipartite <- is.bipartite(networks.0238207531[[1]])
+  # call tergmprepare and integrate results as a child environment in the chain
+  if (class(object) == "btergm") {
+    env <- tergmprepare(formula = formula, offset = object@offset, 
+        verbose = verbose)
+    parent.env(env) <- environment()
+    offset <- object@offset
   } else {
-    if (length(table(as.matrix(networks.0238207531[[1]]) == t(as.matrix(
-        networks.0238207531[[1]])))) > 1) {
-      directed <- TRUE
-    } else {
-      directed <- FALSE
-      stop(paste("The dependent networks seem to be undirected. In this", 
-          "case, please store them as a list of network objects."))
-    }
-    if (nrow(as.matrix(networks.0238207531[[1]])) != ncol(as.matrix(
-        networks.0238207531[[1]]))) {
-      bipartite <- TRUE
-    } else {
-      bipartite <- FALSE
-    }
+    env <- tergmprepare(formula = formula, offset = FALSE, verbose = FALSE)
+    parent.env(env) <- environment()
+    offset <- FALSE
   }
   
   # check and rearrange target network(s)
   if (is.null(target)) {
     message(paste("\nNo 'target' network(s) provided. Using networks on the",
         "left-hand side of the model formula as observed networks.\n"))
-    target <- networks.0238207531
+    target <- env$networks
   } else if (class(target) == "network" || class(target) == "matrix") {
     target <- list(target)
     message("\nOne observed ('target') network was provided.\n")
@@ -641,76 +558,66 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
     stop("'target' must be a network, matrix, or list of matrices or networks.")
   }
   
+  # extract coefficients from object
+  if (class(object) == "btergm" && offset == TRUE) {
+    coefs <- c(coef(object), -Inf)  # -Inf for offset matrix
+  } else {
+    coefs <- coef(object)
+  }
+  
   # adjust formula at each step, and simulate networks
   sim <- list()
   tstats <- list()
   degen <- list()
-  for (index in 1:time.steps) {
-    # disassemble formula and preprocess lhs and rhs
-    tilde <- deparse(formula[[1]])
-    lhs <- deparse(formula[[2]])
-    
-    # no or single bracket --> list of networks
-    if (class(eval(parse(text = lhs))) == "list") {
-      if ((!grepl("\\]", lhs)) || (grepl("[^\\]]\\]$", lhs, perl = TRUE))) {
-        lhs <- paste(lhs, "[[", index, "]]", sep = "")
-      } else if (grepl("\\]\\]", lhs)) { # double index bracket --> one network
-        # do nothing
-      }
-    } else if (class(eval(parse(text = lhs))) == "network") {
-      # ergm object --> do nothing
-    } else if (class(eval(parse(text = lhs))) == "matrix") {
-      # matrix object --> do nothing
-    } else {
-      stop("Object type on the left-hand side of the equation not recognized.")
-    }
-    
-    rhs <- paste(deparse(formula[[3]]), collapse = "")
-    rhs <- gsub("\\s+", " ", rhs)
-    rhs <- preprocessrhs(rhs, length(networks.0238207531), iterator = index)
-    
-    # reassemble formula and add to formula vector
-    f <- paste(lhs, tilde, rhs)
-    form <- as.formula(f)
-    
+  for (index in 1:env$time.steps) {
     # simulations for statnet-style and rocpr GOF
     if (classicgof == TRUE || rocprgof == TRUE) {
-      message(paste("Simulating", nsim, 
-          "networks from the following formula:\n", 
-          gsub("\\s+", " ", paste(deparse(form), collapse = "")), "\n"))
-      if (parallel[1] == "no") {
-        sim[[index]] <- simulate.formula(form, nsim = nsim, 
-            coef = coef(object), constraints = ~ ., 
+      if (verbose == TRUE) {
+        if (class(object) == "ergm") {
+          f.i <- paste(deparse(formula), collapse = "")
+          f.i <- gsub("\\s+", " ", f.i)
+        } else {
+          f.i <- gsub("\\[\\[i\\]\\]", paste0("[[", index, "]]"), 
+              paste(deparse(env$form), collapse = ""))
+          f.i <- gsub("\\s+", " ", f.i)
+          f.i <- gsub("^networks", env$lhs.original, f.i)
+        }
+        message(paste("Simulating", nsim, 
+            "networks from the following formula:\n", f.i, "\n"))
+      }
+      if (parallel[1] %in% c("no", "SOCK", "MPI")) {
+        if (parallel[1] == "no") {
+          ncpus <- 0
+          p <- NULL
+        }
+        i <- index
+        sim[[index]] <- simulate.formula(env$form, nsim = nsim, 
+            coef = coefs, constraints = ~ ., 
             control = control.simulate.formula(MCMC.interval = MCMC.interval, 
-            MCMC.burnin = MCMC.burnin))
-      } else if (parallel[1] == "SOCK" || parallel[1] == "MPI") {
-        sim[[index]] <- simulate.formula(form, nsim = nsim, 
-            coef = coef(object), constraints = ~ ., 
-            control = control.simulate.formula(MCMC.interval = MCMC.interval, 
-            MCMC.burnin = MCMC.burnin, parallel = ncpus, 
-            parallel.type = parallel))
+            MCMC.burnin = MCMC.burnin, parallel = ncpus, parallel.type = p))
       } else {
-      stop(paste0("For this type of object, \"SOCK\" and \"MPI\" parallel ", 
-          "processing are allowed. \"", parallel, 
-          "\" is not a valid value for the \"parallel\" argument."))
+        stop(paste0("For this type of object, \"SOCK\" and \"MPI\" parallel ", 
+            "processing are allowed. \"", parallel, 
+            "\" is not a valid value for the \"parallel\" argument."))
       }
     }
     
     # compute target stats if degeneracy check is switched on
     if (checkdegeneracy == TRUE) {
-      tstats[[index]] <- summary(remove.offset.formula(form), response = NULL)
-      degen[[index]] <- simulate.formula(form, nsim = nsim, 
-          coef = coef(object), statsonly = TRUE, 
+      tstats[[index]] <- summary(remove.offset.formula(env$form), 
+          response = NULL)
+      degen[[index]] <- simulate.formula(env$form, nsim = nsim, 
+          coef = coefs, statsonly = TRUE, 
           control = control.simulate.formula(MCMC.interval = MCMC.interval, 
           MCMC.burnin = MCMC.burnin))
     }
   }
   
   # check basis network(s)
-  if (time.steps == 1) {
+  if (env$time.steps == 1) {
     message("One network from which simulations are drawn was provided.")
   } else {
-    message(paste(time.steps, "networks from which simulations are",
+    message(paste(object@time.steps, "networks from which simulations are",
         "drawn were provided."))
   }
   
@@ -731,36 +638,41 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
       degensim <- rbind(degensim, degen[[i]])
       target.stats[[i]] <- tstats[[i]]
     }
+    if (offset == TRUE) {
+      degensim <- degensim[, -ncol(degensim)]  # get rid of offset statistic
+    }
     rm(tstats)
     rm(degen)
   }
   
   # if NA in target networks, put them in the base network, too, and vice-versa
-  if (length(networks.0238207531) == length(target)) {
-    for (i in 1:time.steps) {
-      networks.0238207531[[i]] <- as.matrix(networks.0238207531[[i]])
-      networks.0238207531[[i]][is.na(as.matrix(target[[i]]))] <- NA
-      networks.0238207531[[i]] <- network(networks.0238207531[[i]], 
-          directed = directed, bipartite = bipartite)
+  if (length(env$networks) == length(target)) {
+    for (i in 1:env$time.steps) {
+      env$networks[[i]] <- as.matrix(env$networks[[i]])
+      env$networks[[i]][is.na(as.matrix(target[[i]]))] <- NA
+      env$networks[[i]] <- network(env$networks[[i]], 
+          directed = env$directed, bipartite = env$bipartite)
       target[[i]] <- as.matrix(target[[i]])
-      target[[i]][is.na(as.matrix(networks.0238207531[[i]]))] <- NA
-      target[[i]] <- network(target[[i]], directed = directed, 
-          bipartite = bipartite)
+      target[[i]][is.na(as.matrix(env$networks[[i]]))] <- NA
+      target[[i]] <- network(target[[i]], directed = env$directed, 
+          bipartite = env$bipartite)
     }
   }
   
   # create an object where the final results are stored
   gofobject <- list()
   class(gofobject) <- "btergmgof"
-  gofobject$numbasis <- length(networks.0238207531)
+  gofobject$numbasis <- length(env$networks)
   gofobject$numtarget <- length(target)
+  num.vertices <- max(sapply(env$networks, function(object) 
+      get.network.attribute(network::network(object, 
+      directed = env$directed, bipartite = env$bipartite), "n")))
   gofobject$num.vertices <- num.vertices
   
   # comparison of simulated and observed network statistics (statnet-style GOF)
   if (classicgof == TRUE) {
-    gofobject <- statnetgof(gofobject, simulations, target, dsp = dsp, 
-        esp = esp, geodist = geodist, degree = degree, idegree = idegree, 
-        odegree = odegree, kstar = kstar, istar = istar, ostar = ostar)
+    gofobject <- statnetgof(gofobject, simulations, target, 
+        statistics = statistics)
   } else {
     gofobject$statistics <- NULL
     gofobject$raw <- NULL
@@ -770,7 +682,7 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
   if (rocprgof == TRUE) {
     gofobject <- rocprgof(gofobject, simulations, target, rgraph = FALSE, 
         pr.impute = pr.impute)
-    randomgraphs <- randomgraph(networks.0238207531, nsim = nsim)
+    randomgraphs <- randomgraph(env$networks, nsim = nsim)
     gofobject <- rocprgof(gofobject, randomgraphs, target, rgraph = TRUE, 
         pr.impute = pr.impute)
   } else {
@@ -788,7 +700,7 @@ gof.btergm <- function(object, target = NULL, formula = getformula(object),
   if (checkdegeneracy == TRUE) {
     message("\nChecking degeneracy...")
     mat <- list()
-    for (i in 1:time.steps) {
+    for (i in 1:env$time.steps) {
       sm <- as.mcmc.list(as.mcmc(degensim))
       sm <- sweep.mcmc.list(sm, target.stats[[i]], "-")
       center <- TRUE
@@ -830,9 +742,9 @@ gof.sienaAlgorithm <- function(object, siena.data, siena.effects,
     predict.period = NULL, nsim = 50, parallel = c("no", "multicore", 
     "snow"), ncpus = 1, cl = NULL, target.na = NA, 
     target.na.method = "remove", target.structzero = 10, 
-    classicgof = TRUE, rocprgof = TRUE, dsp = TRUE, esp = TRUE, 
-    geodist = TRUE, degree = TRUE, idegree = TRUE, odegree = TRUE, 
-    kstar = TRUE, istar = TRUE, ostar = TRUE, pr.impute = "poly4", ...) {
+    classicgof = TRUE, rocprgof = TRUE, statistics = c("dsp", "esp", 
+    "geodist", "degree", "idegree", "odegree", "kstar", "istar", 
+    "ostar"), pr.impute = "poly4", ...) {
   
   # check RSiena version
   if (!requireNamespace("RSiena", quietly = TRUE)) {
@@ -1005,11 +917,6 @@ gof.sienaAlgorithm <- function(object, siena.data, siena.effects,
     simul <- RSiena::networkExtraction(i = length(ans$sims), obsData = ans$f,
         sims = ans$sims, period = mybase, groupName = "Data1", 
         varName = mydvname)
-    if (is.bipartite(simul)) {  # correct directed = TRUE --> FALSE
-      simul <- as.network(as.matrix(simul))
-    } else if (isSymmetric(as.matrix(simul)) && is.directed(simul)) {
-      simul <- as.network(as.matrix(simul), directed = FALSE)
-    }
     message(paste0("Completed simulation ", q, "."))
     return(simul)
   }
@@ -1036,14 +943,23 @@ gof.sienaAlgorithm <- function(object, siena.data, siena.effects,
         mydvname = dvname)
   }
   
-  # create an object where the final results are stored
-  gofobject <- list()
-  class(gofobject) <- "btergmgof"
-  gofobject$numbasis <- 1
-  gofobject$numtarget <- 1
-  gofobject$num.vertices <- simulations[[1]]$gal$n
+  # correct directed = TRUE --> FALSE
+  isbip <- sapply(simulations, is.bipartite)
+  if (!any(isbip == TRUE)) {
+    isdir <- sapply(simulations, is.directed)
+    issym <- sapply(simulations, function(x) isSymmetric(as.matrix(x)))
+    if (any(isdir && issym) && length(table(isdir && issym)) == 1 && 
+        !any(sapply(target, is.directed))) {
+      for (i in 1:length(simulations)) {
+        if (issym[i] && isdir[i]) {
+          simulations[[i]] <- as.network(as.matrix(simulations[[i]]), 
+              directed = FALSE)
+        }
+      }
+    }
+  }
   
-  # correct properties of the target network (sloppy Siena programming...)
+  # correct properties of the target network
   if (is.directed(target[[1]]) && !is.directed(simulations[[1]])) {
     target[[1]] <- network(as.matrix(target[[1]]), directed = FALSE)
   } else if (!is.directed(target[[1]]) && is.directed(simulations[[1]])) {
@@ -1055,11 +971,17 @@ gof.sienaAlgorithm <- function(object, siena.data, siena.effects,
     target[[1]] <- network(as.matrix(target[[1]]), bipartite = TRUE)
   }
   
+  # create an object where the final results are stored
+  gofobject <- list()
+  class(gofobject) <- "btergmgof"
+  gofobject$numbasis <- 1
+  gofobject$numtarget <- 1
+  gofobject$num.vertices <- simulations[[1]]$gal$n
+  
   # compute classic goodness of fit
   if (classicgof == TRUE) {
-    gofobject <- statnetgof(gofobject, simulations, target = target, dsp = dsp, 
-        esp = esp, geodist = geodist, degree = degree, idegree = idegree, 
-        odegree = odegree, kstar = kstar, istar = istar, ostar = ostar)
+    gofobject <- statnetgof(gofobject, simulations, target = target, 
+        statistics = statistics)
   } else {
     gofobject$statistics <- NULL
     gofobject$raw <- NULL
@@ -1092,9 +1014,9 @@ gof.network <- function(object, covariates, coef, target = NULL,
     nsim = 100, mcmc = FALSE, MCMC.interval = 1000, 
     MCMC.burnin = 10000, parallel = c("no", "MPI", "SOCK"), 
     ncpus = 1, cl = NULL, classicgof = TRUE, rocprgof = TRUE, 
-    dsp = TRUE, esp = TRUE, geodist = TRUE, degree = TRUE, 
-    idegree = TRUE, odegree = TRUE, kstar = TRUE, istar = TRUE, 
-    ostar = TRUE, pr.impute = "poly4", verbose = TRUE, ...) {
+    statistics = c("dsp", "esp", "geodist", "degree", "idegree", 
+    "odegree", "kstar", "istar", "ostar"), pr.impute = "poly4", 
+    verbose = TRUE, ...) {
   
   if (nsim < 2) {
     stop("The 'nsim' argument must be greater than 1.")
@@ -1217,9 +1139,8 @@ gof.network <- function(object, covariates, coef, target = NULL,
   # comparison of simulated and observed network statistics (statnet-style GOF)
   target <- list(target)
   if (classicgof == TRUE) {
-    gofobject <- statnetgof(gofobject, simulations, target, dsp = dsp, 
-        esp = esp, geodist = geodist, degree = degree, idegree = idegree, 
-        odegree = odegree, kstar = kstar, istar = istar, ostar = ostar)
+    gofobject <- statnetgof(gofobject, simulations, target, 
+        statistics = statistics)
   } else {
     gofobject$statistics <- NULL
     gofobject$raw <- NULL
@@ -1609,7 +1530,7 @@ print.btergmgof <- function(x, classicgof = TRUE, rocprgof = TRUE,
   
   # print ROC AUC
   if (!is.null(x$auc.roc) && rocprgof == TRUE) {
-    message("\nArea under the ROC curve:")
+    message("\nArea under the ROC/PR curve:")
     mat <- cbind(t = 1:length(x$auc.roc), "AUC ROC" = x$auc.roc, 
         "AUC PR" = x$auc.pr)
     row.names(mat) <- rep("", length(x$auc.roc))

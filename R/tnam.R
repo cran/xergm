@@ -38,7 +38,9 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
   } else if (class(y) == "list") {
     for (i in 1:length(y)) {
       if (is.integer(y[[i]])) {
+        current.names <- names(y[[i]])
         y[[i]] <- as.numeric(y[[i]])
+        names(y[[i]]) <- current.names
       }
     }
     if (is.null(networks)) {
@@ -214,23 +216,23 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
   
   # check compatibility of dimensions and presence of labels at each time step
   for (i in 1:time.steps) {
-    if (length(y[[i]]) != nrow(networks[[i]])) {
+    if (length(y[[i]]) != nrow(as.matrix(networks[[i]]))) {
       stop(paste0("'y' and 'networks' do not have compatible dimensions at ", 
           "t = ", i, ". Please use the 'preprocess' function to make them ", 
           "compatible."))
     }
-    if (time.steps > 1) {
-      if (is.null(names(y[[i]])) && is.null(rownames(networks[[i]]))) {
-        stop(paste("The matrices or networks or the 'y' variable must have", 
-            "row names, vertex names or names attached to them if multiple", 
-            "time points are present."))
-      } else if (is.null(names(y[[i]])) && !is.null(rownames(networks[[i]]))) {
-        names(y[[i]]) <- rownames(networks[[i]])
-      } else if (!is.null(names(y[[i]])) && is.null(rownames(networks[[i]]))) {
-        rownames(networks[[i]]) <- names(y[[i]])
-      }
+    if (is.null(names(y[[i]])) && is.null(rownames(as.matrix(networks[[i]])))) {
+      stop(paste("The matrices or networks or the 'y' variable must have", 
+          "row names, vertex names or names attached to them if multiple", 
+          "time points are present."))
+    } else if (is.null(names(y[[i]])) && 
+        !is.null(rownames(as.matrix(networks[[i]])))) {
+      names(y[[i]]) <- rownames(networks[[i]])
+    } else if (!is.null(names(y[[i]])) && 
+        is.null(rownames(as.matrix(networks[[i]])))) {
+      rownames(networks[[i]]) <- names(y[[i]])
     }
-    if (!identical(names(y[[i]]), rownames(networks[[i]]))) {
+    if (!identical(names(y[[i]]), rownames(as.matrix(networks[[i]])))) {
       stop(paste0("The names of 'y' and the row names of 'networks' do not ", 
           "match at t = ", i, "."))
     }
@@ -261,11 +263,11 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
   objects$n <- n
   
   # embed node labels
-  if (time.steps == 1) {
+  if (time.steps == 1 && is.null(rownames(objects$networks[[1]]))) {
     nodelabels <- 1:objects$n[[1]]
   } else {
     nodelabels <- character()
-    for (i in 1:length(objects$time.steps)) {
+    for (i in 1:objects$time.steps) {
       nodelabels <- c(nodelabels, rownames(objects$networks[[i]]))
     }
   }
@@ -277,7 +279,7 @@ checkDataTypes <- function(y, networks = NULL, lag = 0) {
 
 # spatial network lag term with optional temporal lag and path distance decay
 netlag <- function(y, networks, lag = 0, pathdist = 1, 
-    decay = pathdist^-1, normalization = c("no", "row", "column"), 
+    decay = pathdist^-1, normalization = c("no", "row", "column", "complete"), 
     reciprocal = FALSE, center = FALSE, coefname = NULL, ...) {
   
   # check validity of arguments
@@ -292,9 +294,6 @@ netlag <- function(y, networks, lag = 0, pathdist = 1,
   }
   if (is.null(reciprocal) || length(reciprocal) > 1) {
     stop("The 'reciprocal' argument must be TRUE or FALSE.")
-  }
-  if (reciprocal == TRUE && (length(pathdist) > 1 || pathdist[1] > 1)) {
-    stop("The 'reciprocal' argument is only valid if 'pathdist = 1' is used.")
   }
   
   # get data in the right shape
@@ -371,6 +370,7 @@ weightlag <- function(y, networks, lag = 0, normalization = c("no", "row",
   # do the computations
   results <- list()  # will contain vectors of results for each time step
   for (k in 1:objects$time.steps) {
+    objects$networks[[k]][is.na(objects$networks[[k]])] <- 0
     if (normalization[1] == "row") {
       for (i in 1:nrow(objects$networks[[k]])) {
         rs <- rowSums(objects$networks[[k]])[i]
@@ -682,24 +682,28 @@ structsim <- function(y, networks, lag = 0, method = c("euclidean",
   for (k in 1:objects$time.steps) {
     # compute structural similarity matrix
     if (method[1] == "euclidean" || method[1] == "minkowski") {
-      d <- as.matrix(dist(objects$networks[[k]], method = method[1], ...)) /
-          sqrt(0.5 * nrow(objects$networks[[k]]))  # standardize to [0; 1]
+      d <- as.matrix(dist(objects$networks[[k]], method = method[1], ...))
+      mx <- max(d, na.rm = TRUE)
+      s <- (mx - d) / mx  # convert dist to similarity and standardize [0; 1]
     } else if (method[1] == "binary") {
       d <- as.matrix(dist(objects$networks[[k]], method = method[1], ...))
+      s <- 1 - d
     } else if (method[1] == "jaccard") {
       d <- as.matrix(vegdist(objects$networks[[k]], method = "jaccard", 
           na.rm = TRUE, ...))
+      s <- 1 - d
     } else if (method[1] == "hamming") {
       d <- sedist(objects$networks[[k]], method = "hamming", ...) / 
           nrow(objects$networks[[k]])  # standardize to [0; 1]
+      s <- 1 - d
     } else {
       stop("'method' argument was not recognized.")
     }
-    s <- 1 - d  # convert distances to similarities
     diag(s) <- 0
     rm(d)
     
     # apply structural similarities as weight matrix
+    s[is.na(s)] <- 0
     result <- s %*% objects$y[[k]]
     results[[k]] <- result
   }
@@ -742,8 +746,8 @@ structsim <- function(y, networks, lag = 0, method = c("euclidean",
 
 # model term which indicates whether an actor has a certain degree centrality
 centrality <- function(networks, type = c("indegree", "outdegree", "freeman", 
-    "betweenness", "flow", "closeness", "eigenvector", "information", "load"), 
-    directed = TRUE, lag = 0, rescale = FALSE, center = FALSE, 
+    "betweenness", "flow", "closeness", "eigenvector", "information", "load", 
+    "bonpow"), directed = TRUE, lag = 0, rescale = FALSE, center = FALSE, 
     coefname = NULL, ...) {
   
   # check validity of arguments and prepare data
@@ -788,6 +792,9 @@ centrality <- function(networks, type = c("indegree", "outdegree", "freeman",
     } else if (type[1] == "load") {
       cent <- loadcent(objects$networks[[i]], gmode = gmode, 
           rescale = rescale, ...)
+    } else if (type[1] == "bonpow") {
+      cent <- bonpow(objects$networks[[i]], gmode = gmode, 
+          rescale = rescale, tol = 1e-20, ...)
     } else {
       stop("'type' argument was not recognized.")
     }
@@ -985,10 +992,9 @@ cliquelag <- function(y, networks, k.min = 2, k.max = Inf, directed = TRUE,
   # do the computations
   results <- list()  # will contain vectors of results for each time step
   for (k in 1:objects$time.steps) {
-    if (any(is.na(objects$networks[[k]])) && packageVersion("sna") <= "2.3-2") {
-      stop(paste("Due to a bug in the 'sna' package, the 'cliquelag' function", 
-          "is currently not compatible with network matrices with NA values."))
-    }
+    objects$network[[k]][is.na(objects$network[[k]])] <- 0  # correct NAs in nw
+    objects$y[[k]][is.na(objects$y[[k]])] <- 0  # correct NAs in y
+    
     # retrieve clique comembership matrices by clique size
     w3d <- clique.census(objects$networks[[k]], mode = mode, 
         clique.comembership = "bysize", tabulate.by.vertex = FALSE, 
@@ -1191,7 +1197,7 @@ tnam <- function(formula, family = gaussian, re.node = FALSE,
   
   # check if GLM is appropriate
   if (re.node == FALSE && re.time == FALSE && length(unique(dat$time)) > 1) {
-    message(paste("Different time points are available. You might want to use", 
+    warning(paste("Different time points are available. You might want to use", 
         "a mixed effects model using arguments 're.time' and/or 're.node'."))
   }
   
@@ -1311,24 +1317,24 @@ tnam <- function(formula, family = gaussian, re.node = FALSE,
     }
     if (isTRUE(all.equal(family, gaussian()))) {  # gaussian link: use lmer
       if (re.node == TRUE && re.time == TRUE) {
-        model <- lmer(response ~ . - re.time - node + (1|re.time) + (1|node), 
-            data = dat, na.action = na.action, ...)
+        model <- lme4::lmer(response ~ . - re.time - node + (1|re.time) + 
+            (1|node), data = dat, na.action = na.action, ...)
       } else if (re.node == TRUE && re.time == FALSE) {
-        model <- lmer(response ~ . - node + (1|node), data = dat, 
+        model <- lme4::lmer(response ~ . - node + (1|node), data = dat, 
             na.action = na.action, ...)
       } else if (re.node == FALSE && re.time == TRUE) {
-        model <- lmer(response ~ . -re.time + (1|re.time), data = dat, 
+        model <- lme4::lmer(response ~ . -re.time + (1|re.time), data = dat, 
             na.action = na.action, ...)
       }
     } else {
       if (re.node == TRUE && re.time == TRUE) {  # other link function: glmer
-        model <- glmer(response ~ . - re.time - node + (1|re.time) + (1|node), 
-            data = dat, family = family, na.action = na.action, ...)
+        model <- lme4::glmer(response ~ . - re.time - node + (1|re.time) + 
+            (1|node), data = dat, family = family, na.action = na.action, ...)
       } else if (re.node == TRUE && re.time == FALSE) {
-        model <- glmer(response ~ . - node + (1|node), data = dat, 
+        model <- lme4::glmer(response ~ . - node + (1|node), data = dat, 
             family = family, na.action = na.action, ...)
       } else if (re.node == FALSE && re.time == TRUE) {
-        model <- glmer(response ~ . - re.time + (1|re.time), data = dat, 
+        model <- lme4::glmer(response ~ . - re.time + (1|re.time), data = dat, 
             family = family, na.action = na.action, ...)
       }
     }

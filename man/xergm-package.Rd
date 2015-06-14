@@ -15,7 +15,7 @@ implemented yet. To display citation information, type
 \code{citation("xergm")}.
 }
 \seealso{
-\link{btergm} \link{mtergm} \link{preprocess} \link{timecov} \link{simulate.btergm} \link[xergm]{gof} \link{interpret} \link{btergm-class} \link{tnam} \link{tnam-terms}
+\link{btergm} \link{mtergm} \link{preprocess} \link{timecov} \link{simulate.btergm} \link[xergm]{gof} \link{interpret} \link{btergm-class} \link{tnam} \link{tnam-terms} \link{knecht} \link{chemnet}
 }
 \author{
 Philip Leifeld (\url{http://www.philipleifeld.de})

@@ -168,7 +168,7 @@ attribsim(y, attribute, match = FALSE, lag = 0,
 
 centrality(networks, type = c("indegree", "outdegree", "freeman", 
     "betweenness", "flow", "closeness", "eigenvector", 
-    "information", "load"), directed = TRUE, lag = 0, 
+    "information", "load", "bonpow"), directed = TRUE, lag = 0, 
     rescale = FALSE, center = FALSE, coefname = NULL, ...)
 
 cliquelag(y, networks, k.min = 2, k.max = Inf, directed = TRUE, 
@@ -188,7 +188,7 @@ degreedummy(networks, deg = 0, type = c("indegree", "outdegree",
 interact(x, y, lag = 0, center = FALSE, coefname = NULL)
 
 netlag(y, networks, lag = 0, pathdist = 1, decay = pathdist^-1, 
-    normalization = c("no", "row", "column"), 
+    normalization = c("no", "row", "column", "complete"), 
     reciprocal = FALSE, center = FALSE, coefname = NULL, ...)
 
 structsim(y, networks, lag = 0, method = c("euclidean", 
@@ -213,16 +213,41 @@ weightlag(y, networks, lag = 0, normalization = c("no", "row",
   \item{match}{If \code{match = FALSE}, a similarity matrix is computed by subtracting node j's attribute value from node i's attribute value, standardizing the resulting distance between 0 and 1, and converting it into a similarity by subtracting it from 1. This similarity matrix is used as a weight matrix to compute a spatial lag. If \code{match = TRUE} is specified, the weight matrix contains values of 1 whenever node i and j have the same attribute value and 0 otherwise.}
   \item{method}{The distance function used for computing structural similarity. Possible values are \code{"euclidean"}, \code{"minkowski"}, \code{"jaccard"}, \code{"binary"}, and \code{"hamming"}.}
   \item{networks}{The network(s) for computing the peer influence, also known as the weight matrix. This can be a matrix or a network object (for a single time step) or a list of matrices or network objects (for multiple time steps).}
-  \item{normalization}{Possible values: \code{"no"} for switching off normalization, \code{"row"} for row normalization of the weight matrix, and \code{"column"} for column normalization of the weight matrix. If \code{"no"} is selected, this corresponds to the total similarity or the sum of all influences of alters. If \code{"row"} is selected, this corresponds to the average alter effect. }
-  \item{pathdist}{An integer or a vector of integers. For example, if \code{pathdist = 1} is used, this computes the sum of the behavior of adjacent nodes. If \code{pathdist = 2} is specified, this computes the effect of indirect paths of length 2 ("friends of friends"). If \code{pathdist = 1:2} is set, both directly connected nodes' behavior and the behavior of nodes at a path distance of 2 from the focal node are counted. See also the \code{decay} argument.}
+  \item{normalization}{Possible values: \code{"no"} for switching off normalization, \code{"row"} for row normalization of the weight matrix, \code{"column"} for column normalization of the weight matrix, and \code{"complete"} for complete normalization.
+  
+  If \code{"no"} is selected, this corresponds to the total similarity or the sum of all influences of tied alters.
+  
+  If \code{"row"} is selected, this corresponds to the average alter effect. If \code{i} is the row node and \code{j} is the column node, row normalization computes the peer influence of \code{j} on \code{i} as a fraction of \code{i}'s overall number of outgoing ties (i.e., \code{i}'s row sum or outdegree centrality). The theoretical intuition is that other nodes' influences on \code{i} are not cumulative; \code{i} rather perceives the average influence of his or her peers. Note that row normalization does not necessarily entail that the values are standardized between 0 and 1.
+  
+  If \code{"column"} is selected, this corresponds to the peer influence of node \code{j} on node \code{i} as a fraction of the number of incoming ties \code{j} has (i.e., \code{j}'s column sum or indegree centrality). This captures the theoretical effect that \code{j} may distribute his or her influence among many nodes, in which case \code{j}'s influence on \code{i} is relatively weak. Thus the "exerted influence of \code{j} on \code{i} decreases with the number of actors \code{j} influences" (Leenders 2002). Note that column normalization does not necessarily entail that the values are standardized between 0 and 1.
+  
+  If \code{"complete"} is selected, this captures the peer influence of node \code{j} on node \code{i} as a fraction of all nodes' cumulative outcome values (including non-tied dyads; except \code{i}'s own outcome value). In other words, complete normalization corresponds to the actual exposure of \code{i} to the influence of his or her tied alters \code{j} over the the exposure \code{i} could receive if \code{i} were tied to all other nodes in the network. If a decay \code{<= 1} is used and if only direct friends are considered, this effectively standardizes the influence scores between \code{0} and \code{1}.}
+  \item{pathdist}{An integer or a vector of integers. For example, if \code{pathdist = 1} is used, this computes the sum of the behavior of adjacent nodes. If \code{pathdist = 2} is specified, this computes the effect of indirect paths of length 2 ("friends of friends"). If \code{pathdist = 1:2} is set, both directly connected nodes' behavior and the behavior of nodes at a path distance of 2 from the focal node are counted. Arbitrary (sets of) path distances can be used. See also the \code{decay} argument.}
   \item{reciprocal}{If \code{reciprocal = TRUE} is specified, only the behavior of nodes to which a reciprocal relation exists is counted (that is, a link in both directions).}
   \item{rescale}{Should the centrality index be rescaled between 0 and 1?}
   \item{reverse}{Reverse the selection of degrees. For example, when \code{deg = 0} and \code{reverse = FALSE} are specified, resulting values of 1 indicate that a node has no connections, whereas the combination \code{deg = 0} and \code{reverse = TRUE} results in the value 1 representing nodes which have a degree of at least 1.}
-  \item{type}{The type of centrality measure. Possible values are \code{"indegree"}, \code{"outdegree"}, \code{"freeman"}, \code{"betweenness"}, \code{"flow"}, \code{"closeness"}, \code{"eigenvector"}, 
-    \code{"information"}, and \code{"load"}.}
+  \item{type}{The type of centrality measure. Possible values are \code{"indegree"}, \code{"outdegree"}, \code{"freeman"}, \code{"betweenness"}, \code{"flow"}, \code{"closeness"}, \code{"eigenvector"}, \code{"information"}, \code{"load"}, and \code{"bonpow"}.}
   \item{x}{A variable that should be interacted with \code{y}. Either a vector or a list of vectors or another model term (this is the preferred way).}
   \item{y}{The outcome or behavior variable. Either a vector (for a single time step) or a list of vectors with named elements in each vector (for multiple time steps) or a data frame with row names where each column is one time step (for multiple time steps).}
   \item{...}{Additional arguments to be handed over to subroutines.}
+}
+\references{
+Leenders, Roger Th. A. J. (2002):
+Modeling Social Influence through Network Autocorrelation: 
+Constructing the Weight Matrix. \emph{Social Networks} 24: 21--47.
+\url{http://dx.doi.org/10.1016/S0378-8733(01)00049-1}.
+
+Daraganova, Galina and Garry Robins (2013):
+Autologistic Actor Attribute Models. In: Lusher, Dean, Johan 
+Koskinen and Garry Robins, "Exponential Random Graph Models for 
+Social Networks: Theory, Methods, and Applications", 
+Cambridge University Press, chapter 9: 102--114.
+
+Hays, Jude C., Aya Kachi and Robert J. Franzese Jr. (2010):
+A Spatial Model Incorporating Dynamic, Endogenous Network 
+Interdependence: A Political Science Application.
+\emph{Statistical Methodology} 7: 406--428.
+\url{http://dx.doi.org/10.1016/j.stamet.2009.11.005}
 }
 \seealso{
 \link{xergm-package} \link{tnam} \link{tnamdata} \link{preprocess} \link{knecht}

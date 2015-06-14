@@ -25,6 +25,10 @@
     \item{\code{response}:}{Object of class \code{"integer"}. The response variable. }
     \item{\code{effects}:}{Object of class \code{"data.frame"}. The effects that went into the \code{glm} call. }
     \item{\code{weights}:}{Object of class \code{"integer"}. The weights of the observations. }
+    \item{\code{auto.adjust}:}{Object of class \code{"logical"}. Indicates whether automatic adjustment of dimensions was done before estimation. }
+    \item{\code{offset}:}{Object of class \code{"logical"}. Indicates whether an offset matrix with structural zeros was used. }
+    \item{\code{directed}:}{Object of class \code{"logical"}. Are the dependent networks directed? }
+    \item{\code{bipartite}:}{Object of class \code{"logical"}. Are the dependent networks bipartite? }
   }
 }
 \usage{

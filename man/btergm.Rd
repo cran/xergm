@@ -5,11 +5,12 @@
 \title{TERGM by bootstrapped pseudolikelihood or MCMC MLE}
 \description{TERGM by bootstrapped pseudolikelihood or MCMC MLE.}
 \usage{
-btergm(formula, R = 500, parallel = c("no", "multicore", "snow"), 
-    ncpus = 1, cl = NULL, ...)
+btergm(formula, R = 500, offset = FALSE, parallel = c("no", 
+    "multicore", "snow"), ncpus = 1, cl = NULL, 
+    verbose = TRUE, ...)
 
-mtergm(formula, constraints = ~ ., estimate = c("MLE", "MPLE"), 
-    control = control.ergm(), ...)
+mtergm(formula, offset = FALSE, constraints = ~ ., 
+    estimate = c("MLE", "MPLE"), verbose = TRUE, ...)
 }
 \details{
 The \code{btergm} function computes temporal exponential random graph models (TERGM) by bootstrapped pseudolikelihood, as described in Desmarais and Cranmer (2012).
@@ -19,12 +20,13 @@ The \code{mtergm} function computes TERGMs by MCMC MLE (or MPLE with uncorrected
 \arguments{
 \item{formula}{ Formula for the TERGM. Model construction works like in the \pkg{ergm} package with the same model terms etc. (for a list of terms, see \code{help("\link[ergm]{ergm-terms}")}). The networks to be modeled on the left-hand side of the equation must be given either as a list of network objects with more recent networks last (i.e., chronological order) or as a list of matrices with more recent matrices at the end. \code{dyadcov} and \code{edgecov} terms accept time-independent covariates (as \code{network} or \code{matrix} objects) or time-varying covariates (as a list of networks or matrices with the same length as the list of networks to be modeled). }
 \item{R}{ Number of bootstrap replications. The higher the number of replications, the more accurate but also the slower is the estimation. }
+\item{offset}{ If \code{offset = TRUE} is set, a list of offset matrices (one for each time step) with structural zeros is handed over to the pseudolikelihood routine. The offset matrices contain structural zeros where either the dependent networks or any of the covariates have missing nodes (if \code{auto.adjust = TRUE} is used). All matrices and network objects are inflated to the dimensions of the largest object, and the offset matrices inform the estimation routine which dyads are constrained to be absent (that is, fixed at \code{-Inf}). If \code{offset = FALSE} is set (the default behavior) and \code{auto.adjust} is switched on, all nodes that are not present across all covariates and networks within a time step are removed completely from the respective object(s) before estimation begins. This is computationally more efficient than using an offset matrix. }
 \item{parallel}{ Use multiple cores in a computer or nodes in a cluster to speed up bootstrapping computations. The default value \code{"no"} means parallel computing is switched off. If \code{"multicore"} is used, the \code{mclapply} function from the \pkg{parallel} package (formerly in the \pkg{multicore} package) is used for parallelization. This should run on any kind of system except MS Windows because it is based on forking. It is usually the fastest type of parallelization. If \code{"snow"} is used, the \code{parLapply} function from the \pkg{parallel} package (formerly in the \pkg{snow} package) is used for parallelization. This should run on any kind of system including cluster systems and including MS Windows. It is slightly slower than the former alternative if the same number of cores is used. However, \code{"snow"} provides support for MPI clusters with a large amount of cores, which \pkg{multicore} does not offer (see also the \code{cl} argument). The backend for the bootstrapping procedure is the \pkg{boot} package. }
 \item{ncpus}{ The number of CPU cores used for parallel computing (only if \code{parallel} is activated). If the number of cores should be detected automatically on the machine where the code is executed, one can set \code{ncpus = detectCores()} after loading the \pkg{parallel} package. On some HPC clusters, the number of available cores is saved as an environment variable; for example, if MOAB is used, the number of available cores can sometimes be accessed using \code{Sys.getenv("MOAB_PROCCOUNT")}, depending on the implementation. }
 \item{cl}{ An optional \pkg{parallel} or \pkg{snow} cluster for use if \code{parallel = "snow"}. If not supplied, a PSOCK cluster is created temporarily on the local machine. }
 \item{constraints}{ Constraints of the ERGM. See \code{\link[ergm]{ergm}} for details. }
 \item{estimate}{ Estimation procedure of the ERGM. MCMC MLE by default, but MPLE with uncorrected standard errors is possible. See \code{\link[ergm]{ergm}} for details. }
-\item{control}{ Control arguments for the ERGM. See \code{\link[ergm]{ergm}} for details. }
+\item{verbose}{ Print details about data preprocessing and estimation settings. }
 \item{...}{ Further arguments to be handed over to subroutines. }
 }
 \references{
@@ -61,7 +63,7 @@ for(i in 1:10){            # create 10 random networks with 10 actors
 }
 
 covariates <- list()
-for (i in 1:10) {          # create 10 matrices as covariates
+for (i in 1:10) {          # create 10 matrices as covariate
   mat <- matrix(rnorm(100), nrow = 10, ncol = 10)
   covariates[[i]] <- mat   # add matrix to the list
 }
@@ -156,7 +158,7 @@ fit <- btergm(networks ~ edges + istar(2) + edgecov(covariates),
 stopCluster(cl)
 
 # In the following example, the Rmpi package is used to create a 
-# cluster. This may not work on all systems; contact your local 
+# cluster. This may not work on all systems; consult your local 
 # support staff or the help files on your HPC server to find out how 
 # to create a cluster object on your system.
 
